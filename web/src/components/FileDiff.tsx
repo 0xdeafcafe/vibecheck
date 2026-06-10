@@ -34,6 +34,7 @@ export function FileDiff({ file, defaultCollapsed, onComment }: Props) {
 
   return (
     <details
+      data-file={file.filename}
       className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/40"
       open={!collapsed}
       onToggle={(e) => setCollapsed(!e.currentTarget.open)}
@@ -55,7 +56,7 @@ export function FileDiff({ file, defaultCollapsed, onComment }: Props) {
           <tbody>
             {rows.map((row, i) => (
               <Fragment key={i}>
-                <tr className={`diff-${row.kind}`}>
+                <tr data-row={i} className={`diff-${row.kind}`}>
                   <td className="lineno w-[1%] min-w-9 select-none px-1.5 text-right align-top text-zinc-600">
                     {row.oldLine ?? ''}
                   </td>

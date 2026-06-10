@@ -31,3 +31,20 @@ body {
 tr:hover .add-comment {
   visibility: visible;
 }
+
+/* Search jump highlight */
+@keyframes flash-bg {
+  0%,
+  30% {
+    background: rgba(139, 92, 246, 0.35);
+  }
+  100% {
+    background: transparent;
+  }
+}
+.flash {
+  animation: flash-bg 1.6s ease-out;
+}
+details.flash > summary {
+  animation: flash-bg 1.6s ease-out;
+}

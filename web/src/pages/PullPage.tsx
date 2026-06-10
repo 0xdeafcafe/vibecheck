@@ -10,8 +10,10 @@ import {
   Stratum,
 } from '../api';
 import { FileDiff } from '../components/FileDiff';
+import { Minimap } from '../components/Minimap';
 import { Overview } from '../components/Overview';
 import { ReviewForm } from '../components/ReviewForm';
+import { SearchPalette } from '../components/SearchPalette';
 
 const STRATA: { key: Stratum; title: string; blurb: string; collapsed: boolean }[] = [
   { key: 'intent', title: 'Intent', blurb: 'ADRs & specs — read these first', collapsed: false },
@@ -30,6 +32,20 @@ export function PullPage() {
   const [loadingMore, setLoadingMore] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [drafts, setDrafts] = useState<DraftComment[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // The page is a visualization — native ⌘F can't see collapsed files,
+  // so we replace it with a model-aware search.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Progressive load: fetch pages until GitHub says there are no more
   // (spec: "Very large pull request").
@@ -140,10 +156,15 @@ export function PullPage() {
         </p>
       </header>
 
-      <Overview pr={pr} files={files} summary={summary} loadingMore={loadingMore} />
+      <div data-minimap="overview">
+        <Overview pr={pr} files={files} summary={summary} loadingMore={loadingMore} />
+      </div>
 
       {/* Intent first: the lens to read the rest of the diff against. */}
-      <section className="mt-4 rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4">
+      <section
+        data-minimap="intent"
+        className="mt-4 rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4"
+      >
         <h2 className="mb-2 text-[10px] font-medium uppercase tracking-wider text-violet-300">
           Intent — PR description
         </h2>
@@ -161,7 +182,7 @@ export function PullPage() {
           const group = byStratum.get(key);
           if (!group || group.length === 0) return null;
           return (
-            <section key={key}>
+            <section key={key} data-minimap={key}>
               <div className="mb-2 flex items-baseline gap-2 border-b border-zinc-800 pb-1.5">
                 <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
                 <span className="text-xs text-zinc-500">
@@ -183,14 +204,19 @@ export function PullPage() {
         })}
       </main>
 
-      <ReviewForm
-        owner={owner}
-        repo={repo}
-        number={prNumber}
-        commitId={pr.head.sha}
-        drafts={drafts}
-        onRemoveDraft={removeDraft}
-      />
+      <div data-minimap="review">
+        <ReviewForm
+          owner={owner}
+          repo={repo}
+          number={prNumber}
+          commitId={pr.head.sha}
+          drafts={drafts}
+          onRemoveDraft={removeDraft}
+        />
+      </div>
+
+      <Minimap depsKey={`${files.length}:${loadingMore}`} />
+      <SearchPalette files={files} open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }
