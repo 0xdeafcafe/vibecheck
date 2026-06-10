@@ -1,3 +1,7 @@
+# Local secrets (gitignored) — VIBECHECK_GITHUB_CLIENT_ID etc.
+-include .env
+export
+
 .PHONY: dev api web build run test vet check session-key clean
 
 # --- development ---------------------------------------------------------
@@ -6,7 +10,7 @@
 dev: check-env web/node_modules
 	@trap 'kill 0' INT TERM; \
 	go run ./cmd/api & \
-	(cd web && npm run dev) & \
+	(cd web && pnpm run dev) & \
 	wait
 
 ## api: run only the Go API on :8080
@@ -15,17 +19,17 @@ api: check-env
 
 ## web: run only the Vite dev server on :5173 (proxies /api to :8080)
 web: web/node_modules
-	cd web && npm run dev
+	cd web && pnpm run dev
 
-web/node_modules: web/package.json web/package-lock.json
-	cd web && npm install
+web/node_modules: web/package.json web/pnpm-lock.yaml
+	cd web && pnpm install
 	@touch web/node_modules
 
 # --- production ----------------------------------------------------------
 
 ## build: build the SPA and the API binary (binary serves web/dist itself)
 build: web/node_modules
-	cd web && npm run build
+	cd web && pnpm run build
 	go build -o bin/vibecheck ./cmd/api
 
 ## run: run the production build (API + built SPA on :8080)
@@ -37,7 +41,7 @@ run: build check-env
 ## test: run Go tests and the frontend typecheck/build
 test:
 	go test ./...
-	cd web && npx tsc -b --force
+	cd web && pnpm exec tsc -b --force
 
 vet:
 	go vet ./...

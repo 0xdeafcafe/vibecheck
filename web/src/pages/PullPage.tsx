@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   api,
@@ -14,6 +14,7 @@ import { Minimap } from '../components/Minimap';
 import { ReviewForm } from '../components/ReviewForm';
 import { SearchPalette } from '../components/SearchPalette';
 import { buildGroups } from '../groups';
+import { renderMarkdown } from '../markdown';
 import { useViewed } from '../viewed';
 
 type Filter = 'hideTests' | 'hideGenerated' | 'hideViewed';
@@ -32,19 +33,75 @@ export function PullPage() {
   const [filters, setFilters] = useState<Set<Filter>>(new Set());
 
   const { viewed, setFileViewed, setManyViewed } = useViewed(owner, repo, prNumber);
+  // the keydown handler reads the live viewed set without re-binding
+  const viewedRef = useRef(viewed);
+  viewedRef.current = viewed;
 
   // The page is a visualization — native ⌘F can't see collapsed files,
-  // so we replace it with a model-aware search.
+  // so we replace it with a model-aware search. j/k/v/o drive a
+  // keyboard review flow over the visible files.
   useEffect(() => {
+    function visibleFiles(): HTMLDetailsElement[] {
+      return [...document.querySelectorAll<HTMLDetailsElement>('details[data-file]')];
+    }
+    function current(): HTMLDetailsElement | null {
+      return document.querySelector<HTMLDetailsElement>('details[data-file].kbd-focus');
+    }
+    function focusFile(el: HTMLDetailsElement) {
+      current()?.classList.remove('kbd-focus');
+      el.classList.add('kbd-focus');
+      // the file may live inside a collapsed group — open it to land there
+      const group = el.closest<HTMLDetailsElement>('details[data-group]');
+      if (group) group.open = true;
+      el.scrollIntoView({ block: 'center' });
+    }
+    function step(dir: 1 | -1) {
+      const files = visibleFiles();
+      if (files.length === 0) return;
+      const idx = files.findIndex((f) => f.classList.contains('kbd-focus'));
+      const next = files[Math.min(Math.max(idx + dir, 0), files.length - 1)];
+      if (next) focusFile(next);
+    }
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         e.preventDefault();
         setSearchOpen(true);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('input, textarea, select, [contenteditable]')) return;
+      switch (e.key) {
+        case 'j':
+          e.preventDefault();
+          step(1);
+          break;
+        case 'k':
+          e.preventDefault();
+          step(-1);
+          break;
+        case 'o': {
+          const el = current();
+          if (el) {
+            e.preventDefault();
+            el.open = !el.open;
+          }
+          break;
+        }
+        case 'v': {
+          const el = current();
+          if (el?.dataset.file) {
+            e.preventDefault();
+            setFileViewed(el.dataset.file, !viewedRef.current.has(el.dataset.file));
+            step(1);
+          }
+          break;
+        }
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [setFileViewed]);
 
   // Progressive load: fetch pages until GitHub says there are no more
   // (spec: "Very large pull request").
@@ -231,9 +288,10 @@ export function PullPage() {
         </summary>
         <div className="px-4 pb-3">
           {pr.body ? (
-            <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-zinc-300">
-              {pr.body}
-            </pre>
+            <div
+              className="markdown max-h-56 overflow-y-auto font-sans text-sm leading-relaxed text-zinc-300"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(pr.body) }}
+            />
           ) : (
             <p className="text-sm text-zinc-500">No PR description.</p>
           )}
@@ -279,6 +337,12 @@ export function PullPage() {
           {hiddenCount > 0 && (
             <span className="ml-1 text-[11px] text-zinc-600">{hiddenCount} hidden</span>
           )}
+          <span
+            className="ml-2 hidden font-mono text-[10px] text-zinc-600 md:inline"
+            title="Keyboard review: j/k next/prev file · v mark viewed · o expand/collapse · ⌘F search"
+          >
+            j k v o ⌘F
+          </span>
         </span>
       </div>
 

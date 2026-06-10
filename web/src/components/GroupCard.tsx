@@ -50,7 +50,8 @@ export function GroupCard({
         done ? 'border-zinc-800/60 opacity-60' : 'border-zinc-800'
       }`}
     >
-      <summary className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-zinc-800/30">
+      {/* sticky just below the triage bar so you always know which group you're in */}
+      <summary className="sticky top-[42px] z-20 flex cursor-pointer items-center gap-3 bg-zinc-925 px-4 py-2.5 backdrop-blur hover:bg-zinc-800/60">
         <span className={`size-2 shrink-0 rounded-full ${STRATUM_DOT[group.dominant]}`} />
         <code className={`truncate font-mono text-sm ${done ? 'text-zinc-500' : 'text-zinc-100'}`}>
           {group.label}

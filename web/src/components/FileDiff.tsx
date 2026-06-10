@@ -1,7 +1,9 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { ClassifiedFile, DraftComment, ExistingComment } from '../api';
 import { parsePatch } from '../diff';
 import { highlightLine, languageFor } from '../highlight';
+import { cachedSummary, onModelProgress, summarize } from '../llm';
+import { renderMarkdown } from '../markdown';
 
 interface Props {
   file: ClassifiedFile;
@@ -194,10 +196,34 @@ export function FileDiff({ file, defaultCollapsed, viewed, onViewed, onComment, 
 }
 
 // AI bots write essays; collapse them to one line by default. Humans
-// get their full comment.
+// get their full comment. The ✨tl;dr button runs a tiny in-browser
+// Gemma to compress the essay into one sentence (cached per comment).
 function ExistingCommentView({ comment }: { comment: ExistingComment }) {
   const firstLine = comment.body.split('\n').find((l) => l.trim()) ?? '';
   const isLong = comment.body.trim() !== firstLine.trim();
+  const [summary, setSummary] = useState<string | null>(() => cachedSummary(comment.id));
+  const [working, setWorking] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!working) return;
+    return onModelProgress(setProgress);
+  }, [working]);
+
+  async function tldr(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setWorking(true);
+    try {
+      setSummary(await summarize(comment.id, comment.body));
+    } catch (err) {
+      console.error('tl;dr failed', err);
+      setSummary(null);
+    } finally {
+      setWorking(false);
+      setProgress(null);
+    }
+  }
 
   if (comment.bot && isLong) {
     return (
@@ -206,25 +232,45 @@ function ExistingCommentView({ comment }: { comment: ExistingComment }) {
           <span className="shrink-0 rounded-sm bg-amber-500/15 px-1 font-medium text-amber-400">
             {comment.login} · ai
           </span>
-          <span className="truncate text-zinc-500">{firstLine}</span>
+          <span className={`truncate ${summary ? 'text-zinc-300' : 'text-zinc-500'}`}>
+            {summary ? `✨ ${summary}` : firstLine}
+          </span>
+          {!summary && (
+            <button
+              onClick={tldr}
+              disabled={working}
+              className="ml-auto shrink-0 rounded-sm bg-zinc-800 px-1.5 text-[10px] text-zinc-400 hover:bg-violet-600/30 hover:text-violet-200 disabled:opacity-60"
+              title="Summarize with on-device Gemma — first use downloads the model"
+            >
+              {working
+                ? progress !== null && progress < 100
+                  ? `model ${progress}%`
+                  : 'thinking…'
+                : '✨ tl;dr'}
+            </button>
+          )}
         </summary>
-        <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap border-t border-zinc-800 px-2 py-1.5 font-sans text-xs leading-relaxed text-zinc-400">
-          {comment.body}
-        </pre>
+        <div
+          className="markdown max-h-64 overflow-y-auto border-t border-zinc-800 px-2 py-1.5 font-sans text-xs leading-relaxed text-zinc-400"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(comment.body) }}
+        />
       </details>
     );
   }
   return (
     <div className="my-0.5 rounded-md border border-zinc-800 bg-zinc-950/60 px-2 py-1 font-sans text-xs">
       <span
-        className={`mr-2 rounded-sm px-1 font-medium ${
+        className={`mr-2 float-left rounded-sm px-1 font-medium ${
           comment.bot ? 'bg-amber-500/15 text-amber-400' : 'bg-sky-500/15 text-sky-400'
         }`}
       >
         {comment.login}
         {comment.bot ? ' · ai' : ''}
       </span>
-      <span className="whitespace-pre-wrap leading-relaxed text-zinc-300">{comment.body}</span>
+      <div
+        className="markdown leading-relaxed text-zinc-300"
+        dangerouslySetInnerHTML={{ __html: renderMarkdown(comment.body) }}
+      />
     </div>
   );
 }
