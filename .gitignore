@@ -4,3 +4,4 @@ web/dist/
 .env
 *.pem
 .DS_Store
+web/tsconfig.tsbuildinfo
