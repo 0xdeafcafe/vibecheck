@@ -1,16 +1,69 @@
-.PHONY: api web test vet build-web dev-web
+.PHONY: dev api web build run test vet check session-key clean
 
-api:
+# --- development ---------------------------------------------------------
+
+## dev: run the Go API (:8080) and Vite dev server (:5173) together
+dev: check-env web/node_modules
+	@trap 'kill 0' INT TERM; \
+	go run ./cmd/api & \
+	(cd web && npm run dev) & \
+	wait
+
+## api: run only the Go API on :8080
+api: check-env
 	go run ./cmd/api
 
+## web: run only the Vite dev server on :5173 (proxies /api to :8080)
+web: web/node_modules
+	cd web && npm run dev
+
+web/node_modules: web/package.json web/package-lock.json
+	cd web && npm install
+	@touch web/node_modules
+
+# --- production ----------------------------------------------------------
+
+## build: build the SPA and the API binary (binary serves web/dist itself)
+build: web/node_modules
+	cd web && npm run build
+	go build -o bin/vibecheck ./cmd/api
+
+## run: run the production build (API + built SPA on :8080)
+run: build check-env
+	./bin/vibecheck
+
+# --- quality -------------------------------------------------------------
+
+## test: run Go tests and the frontend typecheck/build
 test:
 	go test ./...
+	cd web && npx tsc -b --force
 
 vet:
 	go vet ./...
 
-dev-web:
-	cd web && npm run dev
+check: test vet
 
-build-web:
-	cd web && npm run build
+# --- helpers -------------------------------------------------------------
+
+## session-key: generate a value for VIBECHECK_SESSION_KEY
+session-key:
+	@openssl rand -hex 32
+
+check-env:
+ifndef VIBECHECK_GITHUB_CLIENT_ID
+	$(error VIBECHECK_GITHUB_CLIENT_ID is not set — see README.md "Running locally")
+endif
+ifndef VIBECHECK_GITHUB_CLIENT_SECRET
+	$(error VIBECHECK_GITHUB_CLIENT_SECRET is not set — see README.md "Running locally")
+endif
+ifndef VIBECHECK_SESSION_KEY
+	$(error VIBECHECK_SESSION_KEY is not set — run `make session-key` to generate one)
+endif
+
+clean:
+	rm -rf bin web/dist web/tsconfig.tsbuildinfo
+
+## help: list targets
+help:
+	@grep -E '^## ' Makefile | sed 's/^## /  /'

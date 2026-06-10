@@ -28,9 +28,12 @@ contracts.
    ```sh
    export VIBECHECK_GITHUB_CLIENT_ID=...
    export VIBECHECK_GITHUB_CLIENT_SECRET=...
-   export VIBECHECK_SESSION_KEY=$(openssl rand -hex 32)
+   export VIBECHECK_SESSION_KEY=$(make session-key)
    export VIBECHECK_APP_SLUG=your-app-slug
    ```
 
-3. `make api` (serves on :8080) and `make dev-web` (Vite dev server on
-   :5173, proxying `/api` to :8080).
+3. `make dev` — runs the Go API on :8080 and the Vite dev server on :5173
+   (proxying `/api`) together. Open http://localhost:5173.
+
+For a production-style run, `make run` builds the SPA and the API binary
+and serves both from :8080. `make help` lists all targets.
