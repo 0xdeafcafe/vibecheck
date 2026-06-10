@@ -38,42 +38,53 @@ export function HomePage() {
     navigate(`/r/${parsed.owner}/${parsed.repo}/pull/${parsed.number}`);
   }
 
-  if (loading) return <div className="page-center">Loading…</div>;
+  return (
+    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-5 px-4 text-center">
+      <div>
+        <h1 className="text-4xl font-bold tracking-tight text-zinc-100">
+          vibe<span className="text-violet-400">check</span>
+        </h1>
+        <p className="mt-2 text-sm text-zinc-400">PR review for the AI-coding era.</p>
+      </div>
 
-  if (!me) {
-    return (
-      <div className="page-center">
-        <h1>vibecheck</h1>
-        <p>PR review for the AI-coding era.</p>
-        <a className="button" href="/api/auth/login">
+      {loading ? (
+        <p className="text-sm text-zinc-500">Loading…</p>
+      ) : !me ? (
+        <a
+          className="rounded-md bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500"
+          href="/api/auth/login"
+        >
           Sign in with GitHub
         </a>
-      </div>
-    );
-  }
-
-  return (
-    <div className="page-center">
-      <h1>vibecheck</h1>
-      <p>
-        Signed in as <strong>{me.login}</strong>
-      </p>
-      <form onSubmit={openPr} className="pr-form">
-        <input
-          value={ref}
-          onChange={(e) => setRef(e.target.value)}
-          placeholder="owner/repo#123 or PR URL"
-          autoFocus
-        />
-        <button type="submit">Review</button>
-      </form>
-      {error && <p className="error">{error}</p>}
-      <button
-        className="link-button"
-        onClick={() => api.logout().then(() => setMe(null))}
-      >
-        Sign out
-      </button>
+      ) : (
+        <>
+          <p className="text-sm text-zinc-400">
+            Signed in as <strong className="text-zinc-200">{me.login}</strong>
+          </p>
+          <form onSubmit={openPr} className="flex w-full gap-2">
+            <input
+              value={ref}
+              onChange={(e) => setRef(e.target.value)}
+              placeholder="owner/repo#123 or PR URL"
+              autoFocus
+              className="flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-violet-500"
+            />
+            <button
+              type="submit"
+              className="rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
+            >
+              Review
+            </button>
+          </form>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          <button
+            className="text-xs text-zinc-500 underline hover:text-zinc-300"
+            onClick={() => api.logout().then(() => setMe(null))}
+          >
+            Sign out
+          </button>
+        </>
+      )}
     </div>
   );
 }

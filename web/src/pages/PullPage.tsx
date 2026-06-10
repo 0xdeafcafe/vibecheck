@@ -6,16 +6,18 @@ import {
   ClassifiedFile,
   DraftComment,
   PullRequest,
+  ReviewSummary,
   Stratum,
 } from '../api';
 import { FileDiff } from '../components/FileDiff';
+import { Overview } from '../components/Overview';
 import { ReviewForm } from '../components/ReviewForm';
 
-const STRATA: { key: Stratum; title: string; collapsed: boolean }[] = [
-  { key: 'intent', title: 'Intent — ADRs & specs', collapsed: false },
-  { key: 'core', title: 'Core logic', collapsed: false },
-  { key: 'tests', title: 'Tests', collapsed: false },
-  { key: 'generated', title: 'Generated', collapsed: true },
+const STRATA: { key: Stratum; title: string; blurb: string; collapsed: boolean }[] = [
+  { key: 'intent', title: 'Intent', blurb: 'ADRs & specs — read these first', collapsed: false },
+  { key: 'core', title: 'Core logic', blurb: 'the changes that matter', collapsed: false },
+  { key: 'tests', title: 'Tests', blurb: 'behaviour coverage', collapsed: false },
+  { key: 'generated', title: 'Generated', blurb: 'lockfiles & build output, collapsed', collapsed: true },
 ];
 
 export function PullPage() {
@@ -23,6 +25,7 @@ export function PullPage() {
   const prNumber = Number(number);
 
   const [pr, setPr] = useState<PullRequest | null>(null);
+  const [summary, setSummary] = useState<ReviewSummary | undefined>();
   const [files, setFiles] = useState<ClassifiedFile[]>([]);
   const [loadingMore, setLoadingMore] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
@@ -38,7 +41,10 @@ export function PullPage() {
         for (;;) {
           const resp = await api.pull(owner, repo, prNumber, page);
           if (cancelled) return;
-          if (page === 1) setPr(resp.pr);
+          if (page === 1) {
+            setPr(resp.pr);
+            setSummary(resp.summary);
+          }
           setFiles((prev) => [...prev, ...resp.files]);
           if (!resp.hasMore) break;
           page++;
@@ -77,79 +83,101 @@ export function PullPage() {
 
   if (error) {
     return (
-      <div className="page-center">
-        <h2>Couldn’t load {owner}/{repo}#{prNumber}</h2>
-        <p className="error">{error.message}</p>
+      <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 text-center">
+        <h2 className="text-lg font-semibold text-zinc-100">
+          Couldn’t load {owner}/{repo}#{prNumber}
+        </h2>
+        <p className="text-sm text-red-400">{error.message}</p>
         {error.installUrl && (
-          <a className="button" href={error.installUrl}>
+          <a
+            className="rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
+            href={error.installUrl}
+          >
             Install / request the vibecheck app
           </a>
         )}
         {error.status === 401 && (
-          <a className="button" href="/api/auth/login">
+          <a
+            className="rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
+            href="/api/auth/login"
+          >
             Sign in again
           </a>
         )}
-        <Link to="/">Back</Link>
+        <Link to="/" className="text-sm text-zinc-400 underline hover:text-zinc-200">
+          Back
+        </Link>
       </div>
     );
   }
 
-  if (!pr) return <div className="page-center">Loading pull request…</div>;
-
-  const intentFiles = byStratum.get('intent') ?? [];
+  if (!pr) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-zinc-400">
+        Loading pull request…
+      </div>
+    );
+  }
 
   return (
-    <div className="pull-page">
-      <header className="pull-header">
-        <Link to="/">vibecheck</Link>
-        <h1>
-          {pr.title}{' '}
-          <a href={pr.html_url} className="pr-link">
-            {owner}/{repo}#{prNumber}
+    <div className="mx-auto max-w-6xl px-4 py-5">
+      <header className="mb-4">
+        <div className="mb-1 flex items-baseline gap-3">
+          <Link to="/" className="text-sm font-bold text-violet-400 hover:text-violet-300">
+            vibecheck
+          </Link>
+          <a
+            href={pr.html_url}
+            className="font-mono text-xs text-zinc-500 hover:text-zinc-300"
+          >
+            {owner}/{repo}#{prNumber} ↗
           </a>
-        </h1>
-        <div className="pr-meta">
-          {pr.user.login} wants to merge {pr.commits} commit(s) into{' '}
-          <code>{pr.base.ref}</code> from <code>{pr.head.ref}</code> · +
-          {pr.additions} −{pr.deletions}
-          {loadingMore && <span className="loading-more"> · loading files…</span>}
         </div>
+        <h1 className="text-xl font-semibold text-zinc-100">{pr.title}</h1>
+        <p className="mt-0.5 text-xs text-zinc-500">
+          {pr.user.login} · <span className="font-mono">{pr.head.ref}</span> →{' '}
+          <span className="font-mono">{pr.base.ref}</span>
+        </p>
       </header>
 
-      {/* Intent panel first: the lens to read the rest of the diff against. */}
-      <section className="intent-panel">
-        <h2>Intent</h2>
+      <Overview pr={pr} files={files} summary={summary} loadingMore={loadingMore} />
+
+      {/* Intent first: the lens to read the rest of the diff against. */}
+      <section className="mt-4 rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4">
+        <h2 className="mb-2 text-[10px] font-medium uppercase tracking-wider text-violet-300">
+          Intent — PR description
+        </h2>
         {pr.body ? (
-          <pre className="pr-body">{pr.body}</pre>
+          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-zinc-300">
+            {pr.body}
+          </pre>
         ) : (
-          <p className="muted">No PR description.</p>
-        )}
-        {intentFiles.length > 0 && (
-          <p className="muted">
-            {intentFiles.length} intent document(s) changed in this PR — shown
-            first below.
-          </p>
+          <p className="text-sm text-zinc-500">No PR description.</p>
         )}
       </section>
 
-      <main className="strata">
-        {STRATA.map(({ key, title, collapsed }) => {
+      <main className="mt-6 flex flex-col gap-6">
+        {STRATA.map(({ key, title, blurb, collapsed }) => {
           const group = byStratum.get(key);
           if (!group || group.length === 0) return null;
           return (
-            <section key={key} className={`stratum stratum-${key}`}>
-              <h2>
-                {title} <span className="count">{group.length}</span>
-              </h2>
-              {group.map((f) => (
-                <FileDiff
-                  key={f.filename}
-                  file={f}
-                  defaultCollapsed={collapsed}
-                  onComment={addDraft}
-                />
-              ))}
+            <section key={key}>
+              <div className="mb-2 flex items-baseline gap-2 border-b border-zinc-800 pb-1.5">
+                <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
+                <span className="text-xs text-zinc-500">
+                  {group.length} file{group.length === 1 ? '' : 's'} · {blurb}
+                </span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {group.map((f) => (
+                  <FileDiff
+                    key={f.filename}
+                    file={f}
+                    defaultCollapsed={collapsed}
+                    onComment={addDraft}
+                  />
+                ))}
+              </div>
             </section>
           );
         })}

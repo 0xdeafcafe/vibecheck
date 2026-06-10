@@ -147,11 +147,31 @@ type classifiedFile struct {
 	Stratum   classify.Stratum `json:"stratum"`
 }
 
+type tally struct {
+	Human int `json:"human"`
+	AI    int `json:"ai"`
+}
+
+type reviewerVerdict struct {
+	Login string `json:"login"`
+	Bot   bool   `json:"bot"`
+	State string `json:"state"`
+}
+
+// reviewSummary powers the PR overview header: how much existing review
+// activity there is, and how much of it is bot noise.
+type reviewSummary struct {
+	ReviewComments tally             `json:"reviewComments"`
+	IssueComments  tally             `json:"issueComments"`
+	Verdicts       []reviewerVerdict `json:"verdicts"`
+}
+
 type pullResponse struct {
 	PR      *ghapp.PullRequest `json:"pr"`
 	Files   []classifiedFile   `json:"files"`
 	Page    int                `json:"page"`
 	HasMore bool               `json:"hasMore"`
+	Summary *reviewSummary     `json:"summary,omitempty"`
 }
 
 func (s *Server) handlePull(w http.ResponseWriter, r *http.Request, sess *session.Session) {
@@ -176,6 +196,15 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request, sess *sessio
 		return
 	}
 	out := pullResponse{PR: pr, Page: page, HasMore: hasMore, Files: make([]classifiedFile, 0, len(files))}
+	// The summary only changes per PR, not per file page — fetch it once.
+	if page == 1 {
+		summary, err := s.buildSummary(r, gh, owner, repo, number)
+		if err != nil {
+			s.githubError(w, err)
+			return
+		}
+		out.Summary = summary
+	}
 	for _, f := range files {
 		out.Files = append(out.Files, classifiedFile{
 			Filename:  f.Filename,
@@ -187,6 +216,60 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request, sess *sessio
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) buildSummary(r *http.Request, gh *ghapp.Client, owner, repo string, number int) (*reviewSummary, error) {
+	sum := &reviewSummary{Verdicts: []reviewerVerdict{}}
+
+	reviewComments, err := gh.ReviewCommentAuthors(r.Context(), owner, repo, number)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range reviewComments {
+		sum.ReviewComments.bump(c.User)
+	}
+
+	issueComments, err := gh.IssueCommentAuthors(r.Context(), owner, repo, number)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range issueComments {
+		sum.IssueComments.bump(c.User)
+	}
+
+	reviews, err := gh.Reviews(r.Context(), owner, repo, number)
+	if err != nil {
+		return nil, err
+	}
+	// Latest verdict per reviewer wins; plain COMMENTED reviews don't
+	// override an earlier approval/rejection.
+	latest := map[string]*reviewerVerdict{}
+	order := []string{}
+	for _, rv := range reviews {
+		switch rv.State {
+		case "APPROVED", "CHANGES_REQUESTED", "DISMISSED":
+			if v, ok := latest[rv.User.Login]; ok {
+				v.State = rv.State
+			} else {
+				latest[rv.User.Login] = &reviewerVerdict{Login: rv.User.Login, Bot: rv.User.IsBot(), State: rv.State}
+				order = append(order, rv.User.Login)
+			}
+		}
+	}
+	for _, login := range order {
+		if v := latest[login]; v.State != "DISMISSED" {
+			sum.Verdicts = append(sum.Verdicts, *v)
+		}
+	}
+	return sum, nil
+}
+
+func (t *tally) bump(u ghapp.User) {
+	if u.IsBot() {
+		t.AI++
+	} else {
+		t.Human++
+	}
 }
 
 type submitReviewRequest struct {

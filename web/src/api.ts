@@ -28,11 +28,29 @@ export interface ClassifiedFile {
   stratum: Stratum;
 }
 
+export interface Tally {
+  human: number;
+  ai: number;
+}
+
+export interface ReviewerVerdict {
+  login: string;
+  bot: boolean;
+  state: 'APPROVED' | 'CHANGES_REQUESTED';
+}
+
+export interface ReviewSummary {
+  reviewComments: Tally;
+  issueComments: Tally;
+  verdicts: ReviewerVerdict[];
+}
+
 export interface PullResponse {
   pr: PullRequest;
   files: ClassifiedFile[];
   page: number;
   hasMore: boolean;
+  summary?: ReviewSummary;
 }
 
 export interface DraftComment {

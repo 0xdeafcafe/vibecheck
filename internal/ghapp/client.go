@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 const apiBase = "https://api.github.com"
@@ -30,6 +31,12 @@ func (e *APIError) Error() string {
 type User struct {
 	Login     string `json:"login"`
 	AvatarURL string `json:"avatar_url"`
+	Type      string `json:"type"` // "User", "Bot", "Organization"
+}
+
+// IsBot reports whether the account is an app/bot (e.g. AI reviewers).
+func (u User) IsBot() bool {
+	return u.Type == "Bot" || strings.HasSuffix(u.Login, "[bot]")
 }
 
 type PullRequest struct {
@@ -57,6 +64,18 @@ type PullFile struct {
 	Additions int    `json:"additions"`
 	Deletions int    `json:"deletions"`
 	Patch     string `json:"patch"`
+}
+
+// Review is a submitted PR review (verdict-level).
+type Review struct {
+	User  User   `json:"user"`
+	State string `json:"state"` // APPROVED, CHANGES_REQUESTED, COMMENTED, ...
+}
+
+// CommentAuthor is the author of an existing review or issue comment;
+// vibecheck only needs the author to tally human vs bot noise.
+type CommentAuthor struct {
+	User User `json:"user"`
 }
 
 type ReviewComment struct {
@@ -102,6 +121,53 @@ func (c *Client) PullFiles(ctx context.Context, owner, repo string, number, page
 	return files, hasNext, nil
 }
 
+// Reviews fetches all submitted reviews on the PR.
+func (c *Client) Reviews(ctx context.Context, owner, repo string, number int) ([]Review, error) {
+	var all []Review
+	for page := 1; ; page++ {
+		var batch []Review
+		path := fmt.Sprintf("/repos/%s/%s/pulls/%d/reviews?per_page=100&page=%d", owner, repo, number, page)
+		hasNext, err := c.getPaged(ctx, path, &batch)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if !hasNext {
+			return all, nil
+		}
+	}
+}
+
+// ReviewCommentAuthors fetches the authors of all inline review comments.
+func (c *Client) ReviewCommentAuthors(ctx context.Context, owner, repo string, number int) ([]CommentAuthor, error) {
+	return c.commentAuthors(ctx, fmt.Sprintf("/repos/%s/%s/pulls/%d/comments", owner, repo, number))
+}
+
+// IssueCommentAuthors fetches the authors of all PR-thread comments.
+func (c *Client) IssueCommentAuthors(ctx context.Context, owner, repo string, number int) ([]CommentAuthor, error) {
+	return c.commentAuthors(ctx, fmt.Sprintf("/repos/%s/%s/issues/%d/comments", owner, repo, number))
+}
+
+func (c *Client) commentAuthors(ctx context.Context, basePath string) ([]CommentAuthor, error) {
+	var all []CommentAuthor
+	for page := 1; ; page++ {
+		var batch []CommentAuthor
+		sep := "?"
+		if strings.Contains(basePath, "?") {
+			sep = "&"
+		}
+		path := fmt.Sprintf("%s%sper_page=100&page=%d", basePath, sep, page)
+		hasNext, err := c.getPaged(ctx, path, &batch)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if !hasNext {
+			return all, nil
+		}
+	}
+}
+
 func (c *Client) SubmitReview(ctx context.Context, owner, repo string, number int, review *ReviewRequest) error {
 	path := fmt.Sprintf("/repos/%s/%s/pulls/%d/reviews", owner, repo, number)
 	return c.post(ctx, path, review, nil)
@@ -134,7 +200,11 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, ou
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
+	// An empty token means unauthenticated access (public data only,
+	// low rate limit) — useful in development; sessions always carry one.
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	if body != nil {
