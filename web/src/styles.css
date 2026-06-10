@@ -32,6 +32,39 @@ tr:hover .add-comment {
   visibility: visible;
 }
 
+/* highlight.js — minimal dark token palette tuned to the zinc theme */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-tag {
+  color: #ff7b72;
+}
+.hljs-string,
+.hljs-attr,
+.hljs-regexp {
+  color: #a5d6ff;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_ {
+  color: #d2a8ff;
+}
+.hljs-number,
+.hljs-literal,
+.hljs-symbol {
+  color: #79c0ff;
+}
+.hljs-comment,
+.hljs-quote,
+.hljs-meta {
+  color: #8b949e;
+}
+.hljs-variable,
+.hljs-template-variable,
+.hljs-name {
+  color: #ffa657;
+}
+
 /* Search jump highlight */
 @keyframes flash-bg {
   0%,

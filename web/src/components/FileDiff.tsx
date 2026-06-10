@@ -1,11 +1,15 @@
 import { Fragment, useMemo, useState } from 'react';
-import { ClassifiedFile, DraftComment } from '../api';
+import { ClassifiedFile, DraftComment, ExistingComment } from '../api';
 import { parsePatch } from '../diff';
+import { highlightLine, languageFor } from '../highlight';
 
 interface Props {
   file: ClassifiedFile;
   defaultCollapsed: boolean;
+  viewed: boolean;
+  onViewed: (value: boolean) => void;
   onComment: (c: DraftComment) => void;
+  comments: ExistingComment[];
 }
 
 const STATUS_TINT: Record<string, string> = {
@@ -15,8 +19,8 @@ const STATUS_TINT: Record<string, string> = {
   renamed: 'text-sky-400',
 };
 
-export function FileDiff({ file, defaultCollapsed, onComment }: Props) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+export function FileDiff({ file, defaultCollapsed, viewed, onViewed, onComment, comments }: Props) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed || viewed);
   const [commentingLine, setCommentingLine] = useState<number | null>(null);
   const [body, setBody] = useState('');
 
@@ -24,6 +28,24 @@ export function FileDiff({ file, defaultCollapsed, onComment }: Props) {
     () => (file.patch ? parsePatch(file.patch) : []),
     [file.patch],
   );
+  const language = languageFor(file.filename);
+
+  // Anchor existing comments to RIGHT-side line numbers; comments on
+  // outdated hunks (line 0/undefined) collect at the bottom of the file.
+  const byLine = useMemo(() => {
+    const map = new Map<number, ExistingComment[]>();
+    const orphans: ExistingComment[] = [];
+    for (const c of comments) {
+      if (c.line && c.side !== 'LEFT') {
+        const list = map.get(c.line) ?? [];
+        list.push(c);
+        map.set(c.line, list);
+      } else {
+        orphans.push(c);
+      }
+    }
+    return { map, orphans };
+  }, [comments]);
 
   function submitComment() {
     if (commentingLine === null || !body.trim()) return;
@@ -32,20 +54,46 @@ export function FileDiff({ file, defaultCollapsed, onComment }: Props) {
     setCommentingLine(null);
   }
 
+  function toggleViewed(value: boolean) {
+    onViewed(value);
+    if (value) setCollapsed(true);
+  }
+
   return (
     <details
       data-file={file.filename}
-      className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/40"
+      className={`overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/40 ${
+        viewed ? 'opacity-50' : ''
+      }`}
       open={!collapsed}
       onToggle={(e) => setCollapsed(!e.currentTarget.open)}
     >
       <summary className="flex cursor-pointer items-baseline gap-2 px-3 py-1.5 text-xs hover:bg-zinc-800/40">
-        <code className="font-mono text-zinc-200">{file.filename}</code>
+        <code className={`font-mono ${viewed ? 'text-zinc-500' : 'text-zinc-200'}`}>
+          {file.filename}
+        </code>
         <span className={STATUS_TINT[file.status] ?? 'text-zinc-500'}>{file.status}</span>
+        {comments.length > 0 && (
+          <span className="text-amber-400/80">
+            💬 {comments.length}
+          </span>
+        )}
         <span className="ml-auto font-mono text-[11px]">
           <span className="text-emerald-500">+{file.additions}</span>{' '}
           <span className="text-red-500">−{file.deletions}</span>
         </span>
+        <label
+          className="flex cursor-pointer select-none items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={viewed}
+            onChange={(e) => toggleViewed(e.target.checked)}
+            className="size-3 accent-violet-500"
+          />
+          viewed
+        </label>
       </summary>
       {rows.length === 0 ? (
         <p className="border-t border-zinc-800 px-3 py-2 text-xs text-zinc-500">
@@ -75,9 +123,28 @@ export function FileDiff({ file, defaultCollapsed, onComment }: Props) {
                     )}
                   </td>
                   <td className="whitespace-pre-wrap break-all pr-2 text-zinc-300">
-                    {row.text}
+                    {row.kind === 'hunk' ? (
+                      row.text
+                    ) : (
+                      <span
+                        dangerouslySetInnerHTML={{
+                          __html: highlightLine(row.text, language),
+                        }}
+                      />
+                    )}
                   </td>
                 </tr>
+                {row.newLine !== undefined &&
+                  byLine.map.has(row.newLine) &&
+                  row.kind !== 'hunk' && (
+                    <tr>
+                      <td colSpan={4} className="bg-zinc-900/70 px-3 py-1.5">
+                        {byLine.map.get(row.newLine)!.map((c) => (
+                          <ExistingCommentView key={c.id} comment={c} />
+                        ))}
+                      </td>
+                    </tr>
+                  )}
                 {commentingLine !== null &&
                   row.newLine === commentingLine &&
                   row.kind !== 'hunk' && (
@@ -112,6 +179,52 @@ export function FileDiff({ file, defaultCollapsed, onComment }: Props) {
           </tbody>
         </table>
       )}
+      {byLine.orphans.length > 0 && (
+        <div className="border-t border-zinc-800 px-3 py-1.5">
+          <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-600">
+            Comments on outdated lines
+          </p>
+          {byLine.orphans.map((c) => (
+            <ExistingCommentView key={c.id} comment={c} />
+          ))}
+        </div>
+      )}
     </details>
+  );
+}
+
+// AI bots write essays; collapse them to one line by default. Humans
+// get their full comment.
+function ExistingCommentView({ comment }: { comment: ExistingComment }) {
+  const firstLine = comment.body.split('\n').find((l) => l.trim()) ?? '';
+  const isLong = comment.body.trim() !== firstLine.trim();
+
+  if (comment.bot && isLong) {
+    return (
+      <details className="my-0.5 rounded-md border border-zinc-800 bg-zinc-950/60">
+        <summary className="flex cursor-pointer items-baseline gap-2 px-2 py-1 font-sans text-xs hover:bg-zinc-800/40">
+          <span className="shrink-0 rounded-sm bg-amber-500/15 px-1 font-medium text-amber-400">
+            {comment.login} · ai
+          </span>
+          <span className="truncate text-zinc-500">{firstLine}</span>
+        </summary>
+        <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap border-t border-zinc-800 px-2 py-1.5 font-sans text-xs leading-relaxed text-zinc-400">
+          {comment.body}
+        </pre>
+      </details>
+    );
+  }
+  return (
+    <div className="my-0.5 rounded-md border border-zinc-800 bg-zinc-950/60 px-2 py-1 font-sans text-xs">
+      <span
+        className={`mr-2 rounded-sm px-1 font-medium ${
+          comment.bot ? 'bg-amber-500/15 text-amber-400' : 'bg-sky-500/15 text-sky-400'
+        }`}
+      >
+        {comment.login}
+        {comment.bot ? ' · ai' : ''}
+      </span>
+      <span className="whitespace-pre-wrap leading-relaxed text-zinc-300">{comment.body}</span>
+    </div>
   );
 }

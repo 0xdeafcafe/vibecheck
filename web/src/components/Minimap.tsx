@@ -95,9 +95,9 @@ export function Minimap({ depsKey }: { depsKey: unknown }) {
       onMouseMove={(e) => e.buttons === 1 && jump(e)}
       title="Minimap — click to jump"
     >
-      {segments.map((s) => (
+      {segments.map((s, i) => (
         <div
-          key={s.key}
+          key={`${s.key}:${i}`}
           className={`absolute inset-x-0.5 rounded-sm ${s.color}`}
           style={{ top: `${s.top * 100}%`, height: `${Math.max(s.height * 100, 0.6)}%` }}
           title={s.label}

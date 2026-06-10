@@ -54,6 +54,12 @@ function jumpTo(r: Result) {
     `details[data-file="${CSS.escape(r.file)}"]`,
   );
   if (!details) return;
+  // the file may live inside a collapsed group card — open ancestors too
+  let anc = details.parentElement;
+  while (anc) {
+    if (anc instanceof HTMLDetailsElement) anc.open = true;
+    anc = anc.parentElement;
+  }
   details.open = true;
   const target =
     r.rowIdx !== undefined

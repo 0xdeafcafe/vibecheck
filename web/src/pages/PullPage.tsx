@@ -5,22 +5,18 @@ import {
   ApiError,
   ClassifiedFile,
   DraftComment,
+  ExistingComment,
   PullRequest,
   ReviewSummary,
-  Stratum,
 } from '../api';
-import { FileDiff } from '../components/FileDiff';
+import { GroupCard } from '../components/GroupCard';
 import { Minimap } from '../components/Minimap';
-import { Overview } from '../components/Overview';
 import { ReviewForm } from '../components/ReviewForm';
 import { SearchPalette } from '../components/SearchPalette';
+import { buildGroups } from '../groups';
+import { useViewed } from '../viewed';
 
-const STRATA: { key: Stratum; title: string; blurb: string; collapsed: boolean }[] = [
-  { key: 'intent', title: 'Intent', blurb: 'ADRs & specs — read these first', collapsed: false },
-  { key: 'core', title: 'Core logic', blurb: 'the changes that matter', collapsed: false },
-  { key: 'tests', title: 'Tests', blurb: 'behaviour coverage', collapsed: false },
-  { key: 'generated', title: 'Generated', blurb: 'lockfiles & build output, collapsed', collapsed: true },
-];
+type Filter = 'hideTests' | 'hideGenerated' | 'hideViewed';
 
 export function PullPage() {
   const { owner = '', repo = '', number = '' } = useParams();
@@ -33,6 +29,9 @@ export function PullPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [drafts, setDrafts] = useState<DraftComment[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [filters, setFilters] = useState<Set<Filter>>(new Set());
+
+  const { viewed, setFileViewed, setManyViewed } = useViewed(owner, repo, prNumber);
 
   // The page is a visualization — native ⌘F can't see collapsed files,
   // so we replace it with a model-aware search.
@@ -80,15 +79,46 @@ export function PullPage() {
     };
   }, [owner, repo, prNumber]);
 
-  const byStratum = useMemo(() => {
-    const groups = new Map<Stratum, ClassifiedFile[]>();
-    for (const f of files) {
-      const list = groups.get(f.stratum) ?? [];
-      list.push(f);
-      groups.set(f.stratum, list);
+  const groups = useMemo(() => buildGroups(files), [files]);
+
+  const commentsByFile = useMemo(() => {
+    const map = new Map<string, ExistingComment[]>();
+    for (const c of summary?.comments ?? []) {
+      const list = map.get(c.path) ?? [];
+      list.push(c);
+      map.set(c.path, list);
     }
-    return groups;
-  }, [files]);
+    return map;
+  }, [summary]);
+
+  const visibleGroups = useMemo(
+    () =>
+      groups
+        .map((g) => ({
+          ...g,
+          files: g.files.filter((f) => {
+            if (filters.has('hideTests') && f.stratum === 'tests') return false;
+            if (filters.has('hideGenerated') && f.stratum === 'generated') return false;
+            if (filters.has('hideViewed') && viewed.has(f.filename)) return false;
+            return true;
+          }),
+        }))
+        .filter((g) => g.files.length > 0),
+    [groups, filters, viewed],
+  );
+
+  const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
+  const hiddenCount =
+    files.length - visibleGroups.reduce((n, g) => n + g.files.length, 0);
+
+  function toggleFilter(f: Filter) {
+    setFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(f)) next.delete(f);
+      else next.add(f);
+      return next;
+    });
+  }
 
   function addDraft(comment: DraftComment) {
     setDrafts((prev) => [...prev, comment]);
@@ -137,7 +167,7 @@ export function PullPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-5">
-      <header className="mb-4">
+      <header className="mb-3" data-minimap="overview">
         <div className="mb-1 flex items-baseline gap-3">
           <Link to="/" className="text-sm font-bold text-violet-400 hover:text-violet-300">
             vibecheck
@@ -150,58 +180,125 @@ export function PullPage() {
           </a>
         </div>
         <h1 className="text-xl font-semibold text-zinc-100">{pr.title}</h1>
-        <p className="mt-0.5 text-xs text-zinc-500">
-          {pr.user.login} · <span className="font-mono">{pr.head.ref}</span> →{' '}
-          <span className="font-mono">{pr.base.ref}</span>
+        {/* One thin context strip — everything else on this page is for working, not reading stats. */}
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+          <span
+            className={`rounded-full px-2 py-px font-medium ${
+              pr.state === 'open'
+                ? 'bg-emerald-500/15 text-emerald-400'
+                : 'bg-zinc-700/40 text-zinc-400'
+            }`}
+          >
+            {pr.state}
+          </span>
+          <span>{pr.user.login}</span>
+          <span className="font-mono">
+            {pr.head.ref} → {pr.base.ref}
+          </span>
+          <span className="font-mono">
+            <span className="text-emerald-500">+{pr.additions}</span>{' '}
+            <span className="text-red-500">−{pr.deletions}</span> · {files.length} files
+            {loadingMore && '…'}
+          </span>
+          {summary && (
+            <span>
+              💬 {summary.reviewComments.human + summary.issueComments.human} human ·{' '}
+              <span className="text-amber-400/90">
+                {summary.reviewComments.ai + summary.issueComments.ai} ai
+              </span>
+            </span>
+          )}
+          {summary?.verdicts.map((v) => (
+            <span
+              key={v.login}
+              className={v.state === 'APPROVED' ? 'text-emerald-400' : 'text-red-400'}
+            >
+              {v.state === 'APPROVED' ? '✓' : '✗'} {v.login}
+              {v.bot ? ' ·ai' : ''}
+            </span>
+          ))}
         </p>
       </header>
 
-      <div data-minimap="overview">
-        <Overview pr={pr} files={files} summary={summary} loadingMore={loadingMore} />
+      {/* Intent first: the lens to read the rest of the diff against. */}
+      <details
+        data-minimap="intent"
+        className="rounded-xl border border-violet-500/20 bg-violet-500/[0.04]"
+        open
+      >
+        <summary className="cursor-pointer px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-violet-300 hover:bg-violet-500/10">
+          Intent — PR description
+        </summary>
+        <div className="px-4 pb-3">
+          {pr.body ? (
+            <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-zinc-300">
+              {pr.body}
+            </pre>
+          ) : (
+            <p className="text-sm text-zinc-500">No PR description.</p>
+          )}
+        </div>
+      </details>
+
+      {/* Triage bar: overall burn-down + what to hide. Sticky so the
+          progress is always in view while working through groups. */}
+      <div className="sticky top-0 z-30 -mx-4 mt-3 mb-4 flex flex-wrap items-center gap-3 border-b border-zinc-800 bg-zinc-950/95 px-4 py-2 backdrop-blur">
+        <span className="flex items-center gap-2">
+          <span className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-800">
+            <span
+              className="block h-full rounded-full bg-violet-500 transition-[width]"
+              style={{
+                width: files.length ? `${(viewedCount / files.length) * 100}%` : '0%',
+              }}
+            />
+          </span>
+          <span className="font-mono text-xs text-zinc-400">
+            {viewedCount}/{files.length} viewed
+          </span>
+        </span>
+        <span className="ml-auto flex items-center gap-1.5">
+          {(
+            [
+              ['hideTests', 'hide tests'],
+              ['hideGenerated', 'hide generated'],
+              ['hideViewed', 'hide viewed'],
+            ] as [Filter, string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => toggleFilter(key)}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                filters.has(key)
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          {hiddenCount > 0 && (
+            <span className="ml-1 text-[11px] text-zinc-600">{hiddenCount} hidden</span>
+          )}
+        </span>
       </div>
 
-      {/* Intent first: the lens to read the rest of the diff against. */}
-      <section
-        data-minimap="intent"
-        className="mt-4 rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4"
-      >
-        <h2 className="mb-2 text-[10px] font-medium uppercase tracking-wider text-violet-300">
-          Intent — PR description
-        </h2>
-        {pr.body ? (
-          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-zinc-300">
-            {pr.body}
-          </pre>
-        ) : (
-          <p className="text-sm text-zinc-500">No PR description.</p>
+      <main className="flex flex-col gap-2">
+        {visibleGroups.map((g) => (
+          <GroupCard
+            key={g.id}
+            group={g}
+            viewed={viewed}
+            onFileViewed={setFileViewed}
+            onGroupViewed={setManyViewed}
+            onComment={addDraft}
+            commentsByFile={commentsByFile}
+          />
+        ))}
+        {visibleGroups.length === 0 && !loadingMore && (
+          <p className="py-10 text-center text-sm text-zinc-500">
+            Everything is hidden by the current filters — nothing left to review. 🎉
+          </p>
         )}
-      </section>
-
-      <main className="mt-6 flex flex-col gap-6">
-        {STRATA.map(({ key, title, blurb, collapsed }) => {
-          const group = byStratum.get(key);
-          if (!group || group.length === 0) return null;
-          return (
-            <section key={key} data-minimap={key}>
-              <div className="mb-2 flex items-baseline gap-2 border-b border-zinc-800 pb-1.5">
-                <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
-                <span className="text-xs text-zinc-500">
-                  {group.length} file{group.length === 1 ? '' : 's'} · {blurb}
-                </span>
-              </div>
-              <div className="flex flex-col gap-2">
-                {group.map((f) => (
-                  <FileDiff
-                    key={f.filename}
-                    file={f}
-                    defaultCollapsed={collapsed}
-                    onComment={addDraft}
-                  />
-                ))}
-              </div>
-            </section>
-          );
-        })}
       </main>
 
       <div data-minimap="review">
@@ -215,7 +312,7 @@ export function PullPage() {
         />
       </div>
 
-      <Minimap depsKey={`${files.length}:${loadingMore}`} />
+      <Minimap depsKey={`${files.length}:${loadingMore}:${visibleGroups.length}`} />
       <SearchPalette files={files} open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );

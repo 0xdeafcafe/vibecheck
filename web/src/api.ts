@@ -39,10 +39,23 @@ export interface ReviewerVerdict {
   state: 'APPROVED' | 'CHANGES_REQUESTED';
 }
 
+export interface ExistingComment {
+  id: number;
+  inReplyTo?: number;
+  path: string;
+  line?: number;
+  side?: string;
+  body: string;
+  login: string;
+  bot: boolean;
+  createdAt: string;
+}
+
 export interface ReviewSummary {
   reviewComments: Tally;
   issueComments: Tally;
   verdicts: ReviewerVerdict[];
+  comments: ExistingComment[];
 }
 
 export interface PullResponse {

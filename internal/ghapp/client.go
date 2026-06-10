@@ -78,6 +78,19 @@ type CommentAuthor struct {
 	User User `json:"user"`
 }
 
+// PullComment is an existing inline review comment, with enough context
+// to anchor it to a diff line in the UI.
+type PullComment struct {
+	ID        int64  `json:"id"`
+	InReplyTo int64  `json:"in_reply_to_id"`
+	Path      string `json:"path"`
+	Line      int    `json:"line"` // 0 when the comment is on an outdated diff
+	Side      string `json:"side"`
+	Body      string `json:"body"`
+	User      User   `json:"user"`
+	CreatedAt string `json:"created_at"`
+}
+
 type ReviewComment struct {
 	Path string `json:"path"`
 	Line int    `json:"line"`
@@ -138,9 +151,21 @@ func (c *Client) Reviews(ctx context.Context, owner, repo string, number int) ([
 	}
 }
 
-// ReviewCommentAuthors fetches the authors of all inline review comments.
-func (c *Client) ReviewCommentAuthors(ctx context.Context, owner, repo string, number int) ([]CommentAuthor, error) {
-	return c.commentAuthors(ctx, fmt.Sprintf("/repos/%s/%s/pulls/%d/comments", owner, repo, number))
+// PullComments fetches all existing inline review comments with bodies.
+func (c *Client) PullComments(ctx context.Context, owner, repo string, number int) ([]PullComment, error) {
+	var all []PullComment
+	for page := 1; ; page++ {
+		var batch []PullComment
+		path := fmt.Sprintf("/repos/%s/%s/pulls/%d/comments?per_page=100&page=%d", owner, repo, number, page)
+		hasNext, err := c.getPaged(ctx, path, &batch)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if !hasNext {
+			return all, nil
+		}
+	}
 }
 
 // IssueCommentAuthors fetches the authors of all PR-thread comments.

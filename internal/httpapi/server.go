@@ -158,12 +158,27 @@ type reviewerVerdict struct {
 	State string `json:"state"`
 }
 
+// existingComment is an inline review comment already on the PR,
+// anchored so the UI can render it under the matching diff line.
+type existingComment struct {
+	ID        int64  `json:"id"`
+	InReplyTo int64  `json:"inReplyTo,omitempty"`
+	Path      string `json:"path"`
+	Line      int    `json:"line,omitempty"`
+	Side      string `json:"side,omitempty"`
+	Body      string `json:"body"`
+	Login     string `json:"login"`
+	Bot       bool   `json:"bot"`
+	CreatedAt string `json:"createdAt"`
+}
+
 // reviewSummary powers the PR overview header: how much existing review
 // activity there is, and how much of it is bot noise.
 type reviewSummary struct {
 	ReviewComments tally             `json:"reviewComments"`
 	IssueComments  tally             `json:"issueComments"`
 	Verdicts       []reviewerVerdict `json:"verdicts"`
+	Comments       []existingComment `json:"comments"`
 }
 
 type pullResponse struct {
@@ -219,14 +234,25 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request, sess *sessio
 }
 
 func (s *Server) buildSummary(r *http.Request, gh *ghapp.Client, owner, repo string, number int) (*reviewSummary, error) {
-	sum := &reviewSummary{Verdicts: []reviewerVerdict{}}
+	sum := &reviewSummary{Verdicts: []reviewerVerdict{}, Comments: []existingComment{}}
 
-	reviewComments, err := gh.ReviewCommentAuthors(r.Context(), owner, repo, number)
+	reviewComments, err := gh.PullComments(r.Context(), owner, repo, number)
 	if err != nil {
 		return nil, err
 	}
 	for _, c := range reviewComments {
 		sum.ReviewComments.bump(c.User)
+		sum.Comments = append(sum.Comments, existingComment{
+			ID:        c.ID,
+			InReplyTo: c.InReplyTo,
+			Path:      c.Path,
+			Line:      c.Line,
+			Side:      c.Side,
+			Body:      c.Body,
+			Login:     c.User.Login,
+			Bot:       c.User.IsBot(),
+			CreatedAt: c.CreatedAt,
+		})
 	}
 
 	issueComments, err := gh.IssueCommentAuthors(r.Context(), owner, repo, number)

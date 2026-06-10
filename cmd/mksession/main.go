@@ -17,6 +17,7 @@ import (
 
 func main() {
 	login := flag.String("login", "dev", "login name to embed in the session")
+	token := flag.String("token", "", "GitHub token to embed (e.g. $(gh auth token)); empty = unauthenticated")
 	flag.Parse()
 
 	key, err := hex.DecodeString(os.Getenv("VIBECHECK_SESSION_KEY"))
@@ -31,7 +32,7 @@ func main() {
 	}
 
 	rec := httptest.NewRecorder()
-	if err := codec.Write(rec, &session.Session{Login: *login}, false); err != nil {
+	if err := codec.Write(rec, &session.Session{Login: *login, AccessToken: *token}, false); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
