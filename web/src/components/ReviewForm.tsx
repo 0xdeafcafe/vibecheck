@@ -8,6 +8,7 @@ interface Props {
   commitId: string;
   drafts: DraftComment[];
   onRemoveDraft: (index: number) => void;
+  onSubmitted?: () => void;
 }
 
 type Verdict = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT';
@@ -18,7 +19,15 @@ const VERDICTS: { value: Verdict; label: string; active: string }[] = [
   { value: 'COMMENT', label: 'Comment', active: 'bg-st-core text-white' },
 ];
 
-export function ReviewForm({ owner, repo, number, commitId, drafts, onRemoveDraft }: Props) {
+export function ReviewForm({
+  owner,
+  repo,
+  number,
+  commitId,
+  drafts,
+  onRemoveDraft,
+  onSubmitted,
+}: Props) {
   const [verdict, setVerdict] = useState<Verdict>('COMMENT');
   const [summary, setSummary] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -36,6 +45,7 @@ export function ReviewForm({ owner, repo, number, commitId, drafts, onRemoveDraf
         comments: drafts,
       });
       setDone(true);
+      onSubmitted?.();
     } catch (err) {
       // Submission failure must not lose the drafted review
       // (spec: "Review submission fails at GitHub").

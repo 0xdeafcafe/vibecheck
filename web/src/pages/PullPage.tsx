@@ -40,7 +40,22 @@ export function PullPage() {
   const [files, setFiles] = useState<ClassifiedFile[]>([]);
   const [loadingMore, setLoadingMore] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
-  const [drafts, setDrafts] = useState<DraftComment[]>([]);
+  const draftsKey = `vibecheck:drafts:${owner}/${repo}#${prNumber}`;
+  const [drafts, setDrafts] = useState<DraftComment[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(draftsKey) ?? '[]');
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    // persist pending comments so a reload/crash doesn't lose the review
+    try {
+      localStorage.setItem(draftsKey, JSON.stringify(drafts));
+    } catch {
+      // storage unavailable — drafts still held in memory
+    }
+  }, [draftsKey, drafts]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [convOpen, setConvOpen] = useState(false);
@@ -557,8 +572,22 @@ export function PullPage() {
           )}
           {intentFiles.length > 0 && (
             <details open className="rounded-lg border border-line/70 bg-surface/40">
-              <summary className="cursor-pointer px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted hover:text-ink">
+              <summary className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted hover:text-ink">
                 {intentFiles.length} spec{intentFiles.length > 1 ? 's' : ''}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const allViewed = intentFiles.every((f) => viewed.has(f.filename));
+                    setManyViewed(
+                      intentFiles.map((f) => f.filename),
+                      !allViewed,
+                    );
+                  }}
+                  className="ml-auto rounded-md bg-raised px-2 py-0.5 normal-case text-muted hover:bg-accent-soft hover:text-accent"
+                >
+                  mark all viewed
+                </button>
               </summary>
               <div className="flex flex-col gap-2 p-2">
                 {intentFiles.map((f) => (
@@ -619,7 +648,9 @@ export function PullPage() {
         ))}
         {visibleGroups.length === 0 && !loadingMore && (
           <p className="py-10 text-center text-sm text-muted">
-            Everything is hidden by the current filters — nothing left to review. 🎉
+            {viewedCount === files.length
+              ? `🎉 All ${files.length} files reviewed.`
+              : 'Everything is hidden by the current filters.'}
           </p>
         )}
       </main>
@@ -632,6 +663,7 @@ export function PullPage() {
           commitId={pr.head.sha}
           drafts={drafts}
           onRemoveDraft={removeDraft}
+          onSubmitted={() => setDrafts([])}
         />
       </div>
 
