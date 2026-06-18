@@ -92,12 +92,12 @@ export function GroupCard({
       data-owned={group.owned > 0 ? '' : undefined}
       open={open}
       onToggle={(e) => setOpen(e.currentTarget.open)}
-      className={`overflow-hidden rounded-xl border bg-surface ${
+      className={`rounded-xl border bg-surface ${
         done ? 'border-line/60 opacity-60' : 'border-line'
       }`}
     >
       {/* sticky just below the triage bar so you always know which group you're in */}
-      <summary className="sticky top-[42px] z-20 flex flex-col gap-2 bg-surface/90 px-4 py-2.5 backdrop-blur">
+      <summary className="sticky top-[42px] z-20 flex flex-col gap-2 rounded-t-xl bg-surface/95 px-4 py-2.5 backdrop-blur">
         <div className="flex w-full cursor-pointer items-center gap-3">
           {isCluster ? (
           <>

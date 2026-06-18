@@ -3,7 +3,7 @@
 // WASM otherwise) — no comment text ever leaves the machine.
 import { pipeline, TextGenerationPipeline } from '@huggingface/transformers';
 
-const MODEL = 'onnx-community/gemma-3-270m-it-ONNX';
+const MODEL = 'onnx-community/gemma-3-1b-it-ONNX';
 
 let generatorPromise: Promise<TextGenerationPipeline> | null = null;
 
@@ -37,14 +37,16 @@ interface Job {
 }
 
 const PROMPT: Record<Kind, string> = {
-  comment: 'What is this code review comment asking for? Answer in one plain sentence, no markdown.',
+  comment:
+    'Summarize this code review comment in ONE short sentence of plain English — what it asks the author to change. No code, no markdown, no quoting.',
   thread:
-    'Summarize this code review discussion in one or two plain sentences: the concern raised and where it landed. No markdown.',
-  file: 'Summarize what this diff changes in one or two plain sentences. Describe behaviour, not syntax. No markdown.',
+    'Summarize this code review discussion in one or two sentences of plain English: the concern and how it resolved. No code, no markdown.',
+  file:
+    'Below is a code diff. In one or two sentences of plain English, describe what the change does to the behaviour. Do NOT output code, comments, file names or markdown.',
   slice:
-    'These diffs are one area of a pull request. In one or two plain sentences say what this area does. No markdown.',
+    'Below are the diffs for one area of a pull request. In one or two sentences of plain English, describe what this area of the change accomplishes overall. Do NOT list files. Do NOT output code, comments or markdown.',
   intent:
-    'Summarize the intent of this change — the why — in one or two plain sentences. No markdown.',
+    'Below is a change description and its spec/ADR diffs. In one or two sentences of plain English, state the intent — the why — of this change. Do NOT output code or markdown.',
 };
 
 onmessage = async (e: MessageEvent<Job>) => {
@@ -59,8 +61,10 @@ onmessage = async (e: MessageEvent<Job>) => {
       : text.trim().slice(0, 3500);
     const messages = [{ role: 'user', content: `${PROMPT[kind]}\n\n${cleaned}` }];
     const out = await generate(messages, {
-      max_new_tokens: isProse ? 60 : 90,
+      max_new_tokens: isProse ? 64 : 96,
       do_sample: false,
+      repetition_penalty: 1.3,
+      no_repeat_ngram_size: 4,
     });
     const last = (out[0] as { generated_text: { content: string }[] }).generated_text.at(-1);
     const summary = (last?.content ?? '')
