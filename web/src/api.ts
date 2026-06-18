@@ -1,3 +1,5 @@
+import { cacheGet, cacheSet } from './cache';
+
 export type Stratum = 'intent' | 'core' | 'tests' | 'docs' | 'generated';
 
 export interface Me {
@@ -99,7 +101,17 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // GETs go through the IndexedDB cache with a conditional revalidation:
+  // send the cached ETag, and replay the cached body on a 304 (zero body
+  // transfer). POSTs (reviews/logout) skip the cache entirely.
+  const cacheable = !init?.method || init.method === 'GET';
+  const hit = cacheable ? await cacheGet(path) : undefined;
+  if (hit) {
+    init = { ...init, headers: { ...init?.headers, 'If-None-Match': hit.etag } };
+  }
+
   const resp = await fetch(path, init);
+  if (resp.status === 304 && hit) return hit.body as T;
   if (!resp.ok) {
     let message = resp.statusText;
     let installUrl: string | undefined;
@@ -113,7 +125,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(resp.status, message, installUrl);
   }
   if (resp.status === 204) return undefined as T;
-  return resp.json();
+  const body = await resp.json();
+  if (cacheable) {
+    const etag = resp.headers.get('ETag');
+    if (etag) await cacheSet(path, etag, body);
+  }
+  return body;
 }
 
 export const api = {

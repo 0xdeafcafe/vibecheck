@@ -5,7 +5,9 @@ package httpapi
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -133,7 +135,7 @@ func (s *Server) withSession(next func(http.ResponseWriter, *http.Request, *sess
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, sess *session.Session) {
-	writeJSON(w, http.StatusOK, map[string]string{
+	writeJSONCached(w, r, http.StatusOK, map[string]string{
 		"login":     sess.Login,
 		"avatarUrl": sess.AvatarURL,
 	})
@@ -254,7 +256,7 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request, sess *sessio
 			Unowned:          rules != nil && len(owners) == 0,
 		})
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSONCached(w, r, http.StatusOK, out)
 }
 
 // codeownersPaths are tried in order; the first that exists wins.
@@ -472,6 +474,33 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// writeJSONCached is writeJSON plus a strong ETag over the response body,
+// for GET success paths. The server stays stateless: it hashes the bytes it
+// just computed and stores nothing. When the client's If-None-Match matches,
+// we reply 304 with no body — saving the client transfer and letting it
+// render instantly from its IndexedDB cache. This does NOT yet cut our
+// GitHub API calls (we still fetch upstream to build the body).
+//
+// TODO(etag-forward): forward GitHub's per-resource ETags through this
+// stateless server so an unchanged upstream resource costs no rate limit.
+func writeJSONCached(w http.ResponseWriter, r *http.Request, status int, v any) {
+	body, err := json.Marshal(v)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	sum := sha256.Sum256(body)
+	etag := `"` + hex.EncodeToString(sum[:]) + `"`
+	w.Header().Set("ETag", etag)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
