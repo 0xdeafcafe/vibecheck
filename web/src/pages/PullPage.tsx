@@ -14,6 +14,7 @@ import { FileDiff } from '../components/FileDiff';
 import { GradientBackground } from '../components/GradientBackground';
 import { GroupCard } from '../components/GroupCard';
 import { Minimap } from '../components/Minimap';
+import { ModelPicker } from '../components/ModelPicker';
 import { SummaryButton } from '../components/SummaryButton';
 import { ReviewForm } from '../components/ReviewForm';
 import { SearchPalette } from '../components/SearchPalette';
@@ -357,7 +358,8 @@ export function PullPage() {
           >
             {owner}/{repo}#{prNumber} ↗
           </a>
-          <span className="ml-auto">
+          <span className="ml-auto flex items-center gap-2">
+            <ModelPicker />
             <ThemeToggle />
           </span>
         </div>

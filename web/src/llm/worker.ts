@@ -3,29 +3,33 @@
 // WASM otherwise) — no comment text ever leaves the machine.
 import { pipeline, TextGenerationPipeline } from '@huggingface/transformers';
 
-const MODEL = 'onnx-community/gemma-3-1b-it-ONNX';
+const DEFAULT_MODEL = 'onnx-community/gemma-3-1b-it-ONNX';
 
-let generatorPromise: Promise<TextGenerationPipeline> | null = null;
+// One pipeline per model id, so switching models keeps each one cached.
+const generators = new Map<string, Promise<TextGenerationPipeline>>();
 
-function loadGenerator(): Promise<TextGenerationPipeline> {
-  if (!generatorPromise) {
+function loadGenerator(model: string): Promise<TextGenerationPipeline> {
+  let g = generators.get(model);
+  if (!g) {
     const device = 'gpu' in navigator ? 'webgpu' : 'wasm';
-    generatorPromise = pipeline('text-generation', MODEL, {
-      dtype: 'q4',
-      device,
-      progress_callback: (p: { status: string; progress?: number; file?: string }) => {
-        if (p.status === 'progress' && p.progress !== undefined) {
-          postMessage({ type: 'progress', progress: Math.round(p.progress) });
-        }
-      },
-    }) as Promise<TextGenerationPipeline>;
-    // a failed load (network blip mid-download) must not poison retries
-    generatorPromise = generatorPromise.catch((err) => {
-      generatorPromise = null;
+    g = (
+      pipeline('text-generation', model, {
+        dtype: 'q4',
+        device,
+        progress_callback: (p: { status: string; progress?: number; file?: string }) => {
+          if (p.status === 'progress' && p.progress !== undefined) {
+            postMessage({ type: 'progress', progress: Math.round(p.progress) });
+          }
+        },
+      }) as Promise<TextGenerationPipeline>
+    ).catch((err) => {
+      // a failed load (network blip mid-download) must not poison retries
+      generators.delete(model);
       throw err;
     });
+    generators.set(model, g);
   }
-  return generatorPromise;
+  return g;
 }
 
 type Kind = 'comment' | 'thread' | 'file' | 'slice' | 'intent';
@@ -34,6 +38,7 @@ interface Job {
   id: number;
   text: string;
   kind?: Kind;
+  model?: string;
 }
 
 const PROMPT: Record<Kind, string> = {
@@ -50,9 +55,9 @@ const PROMPT: Record<Kind, string> = {
 };
 
 onmessage = async (e: MessageEvent<Job>) => {
-  const { id, text, kind = 'comment' } = e.data;
+  const { id, text, kind = 'comment', model } = e.data;
   try {
-    const generate = await loadGenerator();
+    const generate = await loadGenerator(model ?? DEFAULT_MODEL);
     // For prose (comments) fenced code blocks just burn the tiny context; for
     // diffs the code IS the content, so keep the line structure.
     const isProse = kind === 'comment' || kind === 'thread';

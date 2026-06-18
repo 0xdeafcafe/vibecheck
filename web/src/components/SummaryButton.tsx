@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cachedSummary, onModelProgress, summarize, type SummaryKind } from '../llm';
+import { useModel } from '../model';
 
 interface Props {
   cacheKey: string;
@@ -11,9 +12,15 @@ interface Props {
 // On-device Gemma tl;dr. A button until summarised, then a full-width wrapping
 // panel (never truncated). Reused for comments, files, slices and intent.
 export function SummaryButton({ cacheKey, kind, getText, label = '✨ tl;dr' }: Props) {
+  const model = useModel();
   const [summary, setSummary] = useState<string | null>(() => cachedSummary(cacheKey));
   const [working, setWorking] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
+
+  // re-read the cache when the model (hence the cache key) changes
+  useEffect(() => {
+    setSummary(cachedSummary(cacheKey));
+  }, [cacheKey, model]);
 
   useEffect(() => {
     if (!working) return;

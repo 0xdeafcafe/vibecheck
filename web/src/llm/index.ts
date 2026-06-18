@@ -3,6 +3,8 @@
 // we can cache one per comment, file, slice or intent, and `kind` picks the
 // prompt the worker uses.
 
+import { getModel, modelTag } from '../model';
+
 export type SummaryKind = 'comment' | 'thread' | 'file' | 'slice' | 'intent';
 
 type Listener = (progress: number) => void;
@@ -36,7 +38,7 @@ export function onModelProgress(l: Listener): () => void {
   return () => progressListeners.delete(l);
 }
 
-const cacheKey = (key: string) => `vibecheck:tldr:${key}`;
+const cacheKey = (key: string) => `vibecheck:tldr:${modelTag(getModel())}:${key}`;
 
 export function cachedSummary(key: string): string | null {
   return localStorage.getItem(cacheKey(key));
@@ -50,9 +52,10 @@ export async function summarize(
   const cached = cachedSummary(key);
   if (cached) return cached;
   const id = nextId++;
+  const model = getModel();
   const result = await new Promise<string>((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    getWorker().postMessage({ id, text, kind });
+    getWorker().postMessage({ id, text, kind, model });
   });
   try {
     localStorage.setItem(cacheKey(key), result);
