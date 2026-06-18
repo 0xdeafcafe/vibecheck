@@ -105,6 +105,15 @@ export function Minimap({ depsKey }: { depsKey: unknown }) {
       sections.push(s);
     }
   }
+  // De-cluster the labels so close sections don't overlap into an
+  // unreadable, unclickable pile.
+  const placed: { key: string; label: string; labelTop: number }[] = [];
+  let lastTop = -Infinity;
+  for (const s of sections) {
+    const labelTop = Math.min(Math.max(s.top, lastTop + 0.045), 0.97);
+    placed.push({ key: s.key, label: s.label, labelTop });
+    lastTop = labelTop;
+  }
 
   return (
     // Inset past the scrollbar (right-4) so it isn't clipped. `group` drives
@@ -112,13 +121,15 @@ export function Minimap({ depsKey }: { depsKey: unknown }) {
     <div className="group fixed right-4 top-1/2 z-40 hidden h-[82vh] -translate-y-1/2 lg:block">
       {/* Legend: labelled, clickable sections, aligned to their region.
           Hidden until you hover the minimap. */}
-      <div className="pointer-events-none absolute right-full top-0 mr-2 h-full w-44 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
-        {sections.map((s) => (
+      {/* Labelled section index — persistent (not hover-only) and always
+          clickable, de-clustered so close sections stay readable. */}
+      <div className="absolute right-full top-0 mr-2 h-full w-44 opacity-70 transition-opacity duration-150 group-hover:opacity-100">
+        {placed.map((s) => (
           <button
             key={s.key}
             onClick={() => jumpToSection(s.key)}
-            style={{ top: `${s.top * 100}%` }}
-            className="absolute right-0 flex -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-surface/95 px-2 py-0.5 text-[11px] text-muted shadow-sm backdrop-blur hover:text-ink"
+            style={{ top: `${s.labelTop * 100}%` }}
+            className="absolute right-0 flex -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-surface/95 px-2 py-0.5 text-[11px] text-muted shadow-sm backdrop-blur hover:bg-raised hover:text-ink"
           >
             <span className={`size-1.5 rounded-full ${SECTION[s.key].dot}`} />
             {s.label}

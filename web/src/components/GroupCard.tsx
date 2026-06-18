@@ -102,7 +102,7 @@ export function GroupCard({
           {isCluster ? (
           <>
             <span className="size-2 shrink-0 rounded-full bg-st-mech" />
-            <code className="truncate font-mono text-sm text-ink">{group.signature}</code>
+            <code className="min-w-0 flex-1 truncate font-mono text-sm text-ink">{group.signature}</code>
             <span className="shrink-0 rounded-sm bg-st-mech/15 px-1.5 py-px text-[10px] font-medium text-st-mech">
               mechanical · {group.files.length} files
             </span>
@@ -110,12 +110,12 @@ export function GroupCard({
         ) : (
           <>
             <span className={`size-2 shrink-0 rounded-full ${STRATUM_DOT[group.dominant]}`} />
-            <code className={`truncate font-mono text-sm ${done ? 'text-faint' : 'text-ink'}`}>
+            <code className={`min-w-0 flex-1 truncate font-mono text-sm ${done ? 'text-faint' : 'text-ink'}`}>
               {group.label}
             </code>
             {risk.level !== 'low' && (
               <span
-                className={`shrink-0 rounded-sm px-1 text-[10px] font-semibold uppercase tracking-wide ${
+                className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                   risk.level === 'high' ? 'bg-del-soft text-del' : 'bg-spark-soft text-spark'
                 }`}
                 title={`Risk: ${risk.reasons.join(', ')}`}
