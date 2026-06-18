@@ -1,0 +1,39 @@
+# fly.io app config for vibecheck.forbes.red
+#
+# Deploys the Dockerfile at the repo root (one binary serving /api + the SPA).
+# Run from the repo root: `fly deploy --config deploy/fly.toml`
+#
+# First-time setup (see README.md "## Deployment"):
+#   fly launch --no-deploy --copy-config --config deploy/fly.toml   # if app not created yet
+#   fly certs add vibecheck.forbes.red                              # TLS for the custom domain
+#   fly secrets set \
+#     VIBECHECK_GITHUB_CLIENT_ID=… \
+#     VIBECHECK_GITHUB_CLIENT_SECRET=… \
+#     VIBECHECK_SESSION_KEY=$(make session-key) \
+#     VIBECHECK_APP_SLUG=…                                          # APP_SLUG optional
+#   fly deploy --config deploy/fly.toml
+#
+# Secrets are set with `fly secrets` and never committed here.
+# VIBECHECK_BASE_URL is non-secret config, so it lives in [env] below.
+
+app = "vibecheck"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "../Dockerfile"
+
+[env]
+  VIBECHECK_ADDR = ":8080"
+  # https base flips the session cookie to Secure (see cmd/api/main.go)
+  VIBECHECK_BASE_URL = "https://vibecheck.forbes.red"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

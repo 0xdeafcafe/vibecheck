@@ -1,0 +1,45 @@
+# VPS deploy: Caddy terminates TLS for vibecheck.forbes.red and proxies to
+# the vibecheck container. Run from this directory: `docker compose up -d`.
+#
+# The operator supplies secrets via a gitignored deploy/.env file (see
+# README.md "## Deployment"). Never commit real values.
+#
+#   deploy/.env:
+#     VIBECHECK_GITHUB_CLIENT_ID=…
+#     VIBECHECK_GITHUB_CLIENT_SECRET=…
+#     VIBECHECK_SESSION_KEY=…            # `make session-key`
+#     VIBECHECK_APP_SLUG=…               # optional
+
+services:
+  vibecheck:
+    build:
+      # build the Dockerfile at the repo root
+      context: ..
+      dockerfile: Dockerfile
+    image: vibecheck:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      VIBECHECK_ADDR: ":8080"
+      # https base flips the session cookie to Secure (see cmd/api/main.go)
+      VIBECHECK_BASE_URL: "https://vibecheck.forbes.red"
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - vibecheck
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

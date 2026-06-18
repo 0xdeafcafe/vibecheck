@@ -1,0 +1,18 @@
+# build outputs — rebuilt inside the image
+bin/
+web/dist/
+web/node_modules/
+web/tsconfig.tsbuildinfo
+
+# vcs + local
+.git/
+.gitignore
+.env
+*.pem
+.DS_Store
+
+# docs / deploy configs — not needed in the build context
+deploy/
+docs/
+specs/
+README.md
