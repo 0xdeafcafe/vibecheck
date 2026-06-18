@@ -1,6 +1,7 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, Me, ApiError } from '../api';
+import { GradientBackground } from '../components/GradientBackground';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 // Accepts "owner/repo#123" or a full github.com PR URL.
@@ -41,6 +42,7 @@ export function HomePage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 px-4 text-center">
+      <GradientBackground intensity="full" />
       <div className="fixed right-4 top-4">
         <ThemeToggle />
       </div>

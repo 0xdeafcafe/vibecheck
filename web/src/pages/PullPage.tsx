@@ -11,6 +11,7 @@ import {
 } from '../api';
 import { CommandPalette, type Command } from '../components/CommandPalette';
 import { FileDiff } from '../components/FileDiff';
+import { GradientBackground } from '../components/GradientBackground';
 import { GroupCard } from '../components/GroupCard';
 import { Minimap } from '../components/Minimap';
 import { ReviewForm } from '../components/ReviewForm';
@@ -338,6 +339,7 @@ export function PullPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-5">
+      <GradientBackground intensity="ambient" />
       <header className="mb-3" data-minimap="overview">
         <div className="mb-1 flex items-center gap-3">
           <Link to="/" className="font-display text-base font-medium text-accent hover:text-accent-hover">

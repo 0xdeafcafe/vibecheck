@@ -213,3 +213,90 @@ details[data-file].kbd-focus {
 details.flash > summary {
   animation: flash-bg 1.6s ease-out;
 }
+
+/* Ambient animated gradient (GradientBackground) — light complementary
+   neutrals, GPU-composited transforms only. Sits behind everything. */
+.gradient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.gradient-blob {
+  position: absolute;
+  width: 55vmax;
+  height: 55vmax;
+  border-radius: 50%;
+  filter: blur(90px);
+  will-change: transform;
+}
+.gradient-blob--a {
+  left: -10vmax;
+  top: -12vmax;
+  background: radial-gradient(circle, #c9dbf2 0%, transparent 68%);
+  animation: drift-a 40s ease-in-out infinite;
+}
+.gradient-blob--b {
+  right: -12vmax;
+  bottom: -12vmax;
+  background: radial-gradient(circle, #f4e0cd 0%, transparent 68%);
+  animation: drift-b 52s ease-in-out infinite;
+}
+.gradient-blob--c {
+  left: 28vmax;
+  bottom: -8vmax;
+  background: radial-gradient(circle, #d9ead9 0%, transparent 68%);
+  animation: drift-c 64s ease-in-out infinite;
+}
+
+/* full: present + moving (home / loading) */
+.gradient-bg--full .gradient-blob {
+  opacity: 0.5;
+}
+/* ambient: slow + faint (the working app) */
+.gradient-bg--ambient .gradient-blob {
+  opacity: 0.16;
+  filter: blur(110px);
+  animation-duration: 120s;
+}
+
+:root[data-theme='dark'] .gradient-bg--full .gradient-blob {
+  opacity: 0.24;
+}
+:root[data-theme='dark'] .gradient-bg--ambient .gradient-blob {
+  opacity: 0.1;
+}
+
+@keyframes drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(9vmax, 7vmax) scale(1.15);
+  }
+}
+@keyframes drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-8vmax, -6vmax) scale(1.12);
+  }
+}
+@keyframes drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(6vmax, -9vmax) scale(1.2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gradient-blob {
+    animation: none;
+  }
+}
