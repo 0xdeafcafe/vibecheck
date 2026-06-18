@@ -11,10 +11,11 @@ interface Result {
 }
 
 const STRATUM_TEXT: Record<Stratum, string> = {
-  intent: 'text-violet-400',
-  core: 'text-sky-400',
-  tests: 'text-emerald-400',
-  generated: 'text-zinc-500',
+  intent: 'text-st-intent',
+  core: 'text-st-core',
+  tests: 'text-st-tests',
+  docs: 'text-st-docs',
+  generated: 'text-st-generated',
 };
 
 const MAX_RESULTS = 60;
@@ -122,11 +123,11 @@ export function SearchPalette({ files, open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-[1px]"
       onClick={onClose}
     >
       <div
-        className="mx-auto mt-[12vh] w-full max-w-xl overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl"
+        className="mx-auto mt-[12vh] w-full max-w-xl overflow-hidden rounded-xl border border-line bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <input
@@ -135,14 +136,14 @@ export function SearchPalette({ files, open, onClose }: Props) {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Search files and diff lines…"
-          className="w-full border-b border-zinc-800 bg-transparent px-4 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+          className="w-full border-b border-line bg-transparent px-4 py-3 text-sm text-ink outline-none placeholder:text-faint"
         />
         <ul className="max-h-[50vh] overflow-y-auto">
           {results.map((r, i) => (
             <li key={`${r.file}:${r.rowIdx ?? 'f'}:${i}`}>
               <button
                 className={`flex w-full items-baseline gap-2 px-4 py-1.5 text-left text-xs ${
-                  i === selected ? 'bg-violet-600/20' : 'hover:bg-zinc-800/60'
+                  i === selected ? 'bg-accent-soft' : 'hover:bg-raised'
                 }`}
                 onMouseEnter={() => setSelected(i)}
                 onClick={() => pick(r)}
@@ -151,22 +152,22 @@ export function SearchPalette({ files, open, onClose }: Props) {
                   {r.rowIdx === undefined ? r.file : `${shortPath(r.file)}:${r.line ?? '?'}`}
                 </span>
                 {r.rowIdx !== undefined && (
-                  <span className="truncate font-mono text-zinc-400">{r.text}</span>
+                  <span className="truncate font-mono text-muted">{r.text}</span>
                 )}
               </button>
             </li>
           ))}
           {query.length >= 2 && results.length === 0 && (
-            <li className="px-4 py-3 text-xs text-zinc-500">No matches.</li>
+            <li className="px-4 py-3 text-xs text-muted">No matches.</li>
           )}
           {query.length < 2 && (
-            <li className="px-4 py-3 text-xs text-zinc-600">
+            <li className="px-4 py-3 text-xs text-faint">
               Type 2+ characters — searches every changed file, including collapsed ones.
             </li>
           )}
         </ul>
         {results.length >= MAX_RESULTS && (
-          <p className="border-t border-zinc-800 px-4 py-1.5 text-[10px] text-zinc-600">
+          <p className="border-t border-line px-4 py-1.5 text-[10px] text-faint">
             Showing first {MAX_RESULTS} matches — refine the query.
           </p>
         )}

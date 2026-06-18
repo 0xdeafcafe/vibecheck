@@ -1,6 +1,7 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, Me, ApiError } from '../api';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 // Accepts "owner/repo#123" or a full github.com PR URL.
 function parsePrRef(input: string): { owner: string; repo: string; number: number } | null {
@@ -39,27 +40,33 @@ export function HomePage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-5 px-4 text-center">
+    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 px-4 text-center">
+      <div className="fixed right-4 top-4">
+        <ThemeToggle />
+      </div>
+
       <div>
-        <h1 className="text-4xl font-bold tracking-tight text-zinc-100">
-          vibe<span className="text-violet-400">check</span>
+        <h1 className="font-display text-6xl text-ink">
+          vibe<span className="text-accent">check</span>
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">PR review for the AI-coding era.</p>
+        <p className="mt-3 text-sm text-muted">
+          PR review for the <span className="font-display italic">AI-coding era</span>.
+        </p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-zinc-500">Loading…</p>
+        <p className="text-sm text-muted">Loading…</p>
       ) : !me ? (
         <a
-          className="rounded-md bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500"
+          className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink hover:bg-accent-hover"
           href="/api/auth/login"
         >
           Sign in with GitHub
         </a>
       ) : (
         <>
-          <p className="text-sm text-zinc-400">
-            Signed in as <strong className="text-zinc-200">{me.login}</strong>
+          <p className="text-sm text-muted">
+            Signed in as <strong className="text-ink">{me.login}</strong>
           </p>
           <form onSubmit={openPr} className="flex w-full gap-2">
             <input
@@ -67,18 +74,18 @@ export function HomePage() {
               onChange={(e) => setRef(e.target.value)}
               placeholder="owner/repo#123 or PR URL"
               autoFocus
-              className="flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-violet-500"
+              className="flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-accent"
             />
             <button
               type="submit"
-              className="rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-ink hover:bg-accent-hover"
             >
               Review
             </button>
           </form>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-del">{error}</p>}
           <button
-            className="text-xs text-zinc-500 underline hover:text-zinc-300"
+            className="text-xs text-muted underline hover:text-ink"
             onClick={() => api.logout().then(() => setMe(null))}
           >
             Sign out

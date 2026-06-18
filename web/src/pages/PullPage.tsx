@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -9,19 +9,26 @@ import {
   PullRequest,
   ReviewSummary,
 } from '../api';
+import { CommandPalette, type Command } from '../components/CommandPalette';
+import { FileDiff } from '../components/FileDiff';
 import { GroupCard } from '../components/GroupCard';
 import { Minimap } from '../components/Minimap';
 import { ReviewForm } from '../components/ReviewForm';
 import { SearchPalette } from '../components/SearchPalette';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { buildGroups } from '../groups';
+import { warmSyntax } from '../highlight';
+import { summarizeIntent } from '../intent';
 import { renderMarkdown } from '../markdown';
+import { setPref } from '../theme';
 import { useViewed } from '../viewed';
 
-type Filter = 'hideTests' | 'hideGenerated' | 'hideViewed';
+type Filter = 'hideTests' | 'hideGenerated' | 'hideDocs' | 'hideViewed';
 
 export function PullPage() {
   const { owner = '', repo = '', number = '' } = useParams();
   const prNumber = Number(number);
+  const navigate = useNavigate();
 
   const [pr, setPr] = useState<PullRequest | null>(null);
   const [summary, setSummary] = useState<ReviewSummary | undefined>();
@@ -30,12 +37,19 @@ export function PullPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [drafts, setDrafts] = useState<DraftComment[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [cmdOpen, setCmdOpen] = useState(false);
   const [filters, setFilters] = useState<Set<Filter>>(new Set());
 
   const { viewed, setFileViewed, setManyViewed } = useViewed(owner, repo, prNumber);
   // the keydown handler reads the live viewed set without re-binding
   const viewedRef = useRef(viewed);
   viewedRef.current = viewed;
+
+  // Start loading the syntax highlighter early — it's code-split, so kick
+  // it off while the PR pages are still fetching.
+  useEffect(() => {
+    warmSyntax();
+  }, []);
 
   // The page is a visualization — native ⌘F can't see collapsed files,
   // so we replace it with a model-aware search. j/k/v/o drive a
@@ -66,6 +80,11 @@ export function PullPage() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         e.preventDefault();
         setSearchOpen(true);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCmdOpen(true);
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -136,7 +155,13 @@ export function PullPage() {
     };
   }, [owner, repo, prNumber]);
 
-  const groups = useMemo(() => buildGroups(files), [files]);
+  // Intent files are surfaced in the top panel as summaries, so keep them
+  // out of the main group flow.
+  const intentFiles = useMemo(() => files.filter((f) => f.stratum === 'intent'), [files]);
+  const groups = useMemo(
+    () => buildGroups(files.filter((f) => f.stratum !== 'intent')),
+    [files],
+  );
 
   const commentsByFile = useMemo(() => {
     const map = new Map<string, ExistingComment[]>();
@@ -156,6 +181,7 @@ export function PullPage() {
           files: g.files.filter((f) => {
             if (filters.has('hideTests') && f.stratum === 'tests') return false;
             if (filters.has('hideGenerated') && f.stratum === 'generated') return false;
+            if (filters.has('hideDocs') && f.stratum === 'docs') return false;
             if (filters.has('hideViewed') && viewed.has(f.filename)) return false;
             return true;
           }),
@@ -163,6 +189,67 @@ export function PullPage() {
         .filter((g) => g.files.length > 0),
     [groups, filters, viewed],
   );
+
+  const commands = useMemo<Command[]>(() => {
+    const allFiles = files.map((f) => f.filename);
+    const setOpenAll = (open: boolean) =>
+      document
+        .querySelectorAll<HTMLDetailsElement>('details[data-group], details[data-file]')
+        .forEach((d) => (d.open = open));
+    const jump = (key: string) =>
+      document
+        .querySelector(`[data-minimap="${key}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const flt = (k: Filter, label: string): Command => ({
+      id: k,
+      group: 'Filter',
+      label,
+      hint: filters.has(k) ? 'on' : '',
+      run: () => toggleFilter(k),
+    });
+    return [
+      { id: 'theme-system', group: 'Theme', label: 'Theme: System', run: () => setPref('system') },
+      { id: 'theme-light', group: 'Theme', label: 'Theme: Light', run: () => setPref('light') },
+      { id: 'theme-dark', group: 'Theme', label: 'Theme: Dark', run: () => setPref('dark') },
+      flt('hideTests', 'Toggle hide tests'),
+      flt('hideDocs', 'Toggle hide docs'),
+      flt('hideGenerated', 'Toggle hide generated'),
+      flt('hideViewed', 'Toggle hide viewed'),
+      { id: 'expand', group: 'View', label: 'Expand all', run: () => setOpenAll(true) },
+      { id: 'collapse', group: 'View', label: 'Collapse all', run: () => setOpenAll(false) },
+      {
+        id: 'mark-all',
+        group: 'Review',
+        label: 'Mark all viewed',
+        run: () => setManyViewed(allFiles, true),
+      },
+      {
+        id: 'unmark-all',
+        group: 'Review',
+        label: 'Unmark all viewed',
+        run: () => setManyViewed(allFiles, false),
+      },
+      {
+        id: 'search',
+        group: 'Go',
+        label: 'Search files & lines…',
+        hint: '⌘F',
+        run: () => setSearchOpen(true),
+      },
+      { id: 'j-intent', group: 'Jump', label: 'Jump to intent', run: () => jump('intent') },
+      { id: 'j-core', group: 'Jump', label: 'Jump to core logic', run: () => jump('core') },
+      { id: 'j-tests', group: 'Jump', label: 'Jump to tests', run: () => jump('tests') },
+      { id: 'j-docs', group: 'Jump', label: 'Jump to docs', run: () => jump('docs') },
+      { id: 'j-review', group: 'Jump', label: 'Jump to your review', run: () => jump('review') },
+      {
+        id: 'gh',
+        group: 'Go',
+        label: 'Open PR on GitHub',
+        run: () => pr && window.open(pr.html_url, '_blank'),
+      },
+      { id: 'home', group: 'Go', label: 'Back to home', run: () => navigate('/') },
+    ];
+  }, [files, filters, pr, setManyViewed, navigate]);
 
   const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
   const hiddenCount =
@@ -187,13 +274,13 @@ export function PullPage() {
   if (error) {
     return (
       <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 text-center">
-        <h2 className="text-lg font-semibold text-zinc-100">
+        <h2 className="font-display text-2xl text-ink">
           Couldn’t load {owner}/{repo}#{prNumber}
         </h2>
-        <p className="text-sm text-red-400">{error.message}</p>
+        <p className="text-sm text-del">{error.message}</p>
         {error.installUrl && (
           <a
-            className="rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-ink hover:bg-accent-hover"
             href={error.installUrl}
           >
             Install / request the vibecheck app
@@ -201,13 +288,13 @@ export function PullPage() {
         )}
         {error.status === 401 && (
           <a
-            className="rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-ink hover:bg-accent-hover"
             href="/api/auth/login"
           >
             Sign in again
           </a>
         )}
-        <Link to="/" className="text-sm text-zinc-400 underline hover:text-zinc-200">
+        <Link to="/" className="text-sm text-muted underline hover:text-ink">
           Back
         </Link>
       </div>
@@ -216,7 +303,7 @@ export function PullPage() {
 
   if (!pr) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-zinc-400">
+      <div className="flex min-h-screen items-center justify-center text-sm text-muted">
         Loading pull request…
       </div>
     );
@@ -225,25 +312,26 @@ export function PullPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-5">
       <header className="mb-3" data-minimap="overview">
-        <div className="mb-1 flex items-baseline gap-3">
-          <Link to="/" className="text-sm font-bold text-violet-400 hover:text-violet-300">
+        <div className="mb-1 flex items-center gap-3">
+          <Link to="/" className="font-display text-base font-medium text-accent hover:text-accent-hover">
             vibecheck
           </Link>
           <a
             href={pr.html_url}
-            className="font-mono text-xs text-zinc-500 hover:text-zinc-300"
+            className="font-mono text-xs text-muted hover:text-ink"
           >
             {owner}/{repo}#{prNumber} ↗
           </a>
+          <span className="ml-auto">
+            <ThemeToggle />
+          </span>
         </div>
-        <h1 className="text-xl font-semibold text-zinc-100">{pr.title}</h1>
+        <h1 className="font-display text-2xl text-ink">{pr.title}</h1>
         {/* One thin context strip — everything else on this page is for working, not reading stats. */}
-        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
           <span
             className={`rounded-full px-2 py-px font-medium ${
-              pr.state === 'open'
-                ? 'bg-emerald-500/15 text-emerald-400'
-                : 'bg-zinc-700/40 text-zinc-400'
+              pr.state === 'open' ? 'bg-add-soft text-add' : 'bg-raised text-muted'
             }`}
           >
             {pr.state}
@@ -253,14 +341,14 @@ export function PullPage() {
             {pr.head.ref} → {pr.base.ref}
           </span>
           <span className="font-mono">
-            <span className="text-emerald-500">+{pr.additions}</span>{' '}
-            <span className="text-red-500">−{pr.deletions}</span> · {files.length} files
+            <span className="text-add">+{pr.additions}</span>{' '}
+            <span className="text-del">−{pr.deletions}</span> · {files.length} files
             {loadingMore && '…'}
           </span>
           {summary && (
             <span>
               💬 {summary.reviewComments.human + summary.issueComments.human} human ·{' '}
-              <span className="text-amber-400/90">
+              <span className="text-spark">
                 {summary.reviewComments.ai + summary.issueComments.ai} ai
               </span>
             </span>
@@ -268,7 +356,7 @@ export function PullPage() {
           {summary?.verdicts.map((v) => (
             <span
               key={v.login}
-              className={v.state === 'APPROVED' ? 'text-emerald-400' : 'text-red-400'}
+              className={v.state === 'APPROVED' ? 'text-add' : 'text-del'}
             >
               {v.state === 'APPROVED' ? '✓' : '✗'} {v.login}
               {v.bot ? ' ·ai' : ''}
@@ -277,40 +365,55 @@ export function PullPage() {
         </p>
       </header>
 
-      {/* Intent first: the lens to read the rest of the diff against. */}
-      <details
-        data-minimap="intent"
-        className="rounded-xl border border-violet-500/20 bg-violet-500/[0.04]"
-        open
-      >
-        <summary className="cursor-pointer px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-violet-300 hover:bg-violet-500/10">
-          Intent — PR description
+      {/* Intent: the lens to read the rest against — but you rarely need to
+          re-read it, so it's collapsed by default. Each spec shows a
+          heuristic summary, size and new/update without expanding. */}
+      <details data-minimap="intent" className="rounded-xl border border-accent/20 bg-accent-soft">
+        <summary className="flex cursor-pointer items-center gap-2 px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-accent hover:bg-accent/10">
+          Intent
+          <span className="font-sans normal-case text-muted">
+            {pr.body ? 'PR description' : 'no description'}
+            {intentFiles.length > 0 &&
+              ` · ${intentFiles.length} spec${intentFiles.length > 1 ? 's' : ''}`}
+          </span>
         </summary>
-        <div className="px-4 pb-3">
+        <div className="flex flex-col gap-2 px-4 pb-3">
           {pr.body ? (
             <div
-              className="markdown max-h-56 overflow-y-auto font-sans text-sm leading-relaxed text-zinc-300"
+              className="markdown max-h-56 overflow-y-auto font-sans text-sm leading-relaxed text-ink"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(pr.body) }}
             />
           ) : (
-            <p className="text-sm text-zinc-500">No PR description.</p>
+            <p className="text-sm text-muted">No PR description.</p>
           )}
+          {intentFiles.map((f) => (
+            <FileDiff
+              key={f.filename}
+              file={f}
+              defaultCollapsed
+              viewed={viewed.has(f.filename)}
+              onViewed={(v) => setFileViewed(f.filename, v)}
+              onComment={addDraft}
+              comments={commentsByFile.get(f.filename) ?? []}
+              summary={summarizeIntent(f)}
+            />
+          ))}
         </div>
       </details>
 
       {/* Triage bar: overall burn-down + what to hide. Sticky so the
           progress is always in view while working through groups. */}
-      <div className="sticky top-0 z-30 -mx-4 mt-3 mb-4 flex flex-wrap items-center gap-3 border-b border-zinc-800 bg-zinc-950/95 px-4 py-2 backdrop-blur">
+      <div className="sticky top-0 z-30 -mx-4 mt-3 mb-4 flex flex-wrap items-center gap-3 border-b border-line bg-canvas/95 px-4 py-2 backdrop-blur">
         <span className="flex items-center gap-2">
-          <span className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-800">
+          <span className="h-1.5 w-32 overflow-hidden rounded-full bg-line">
             <span
-              className="block h-full rounded-full bg-violet-500 transition-[width]"
+              className="block h-full rounded-full bg-accent transition-[width]"
               style={{
                 width: files.length ? `${(viewedCount / files.length) * 100}%` : '0%',
               }}
             />
           </span>
-          <span className="font-mono text-xs text-zinc-400">
+          <span className="font-mono text-xs text-muted">
             {viewedCount}/{files.length} viewed
           </span>
         </span>
@@ -318,6 +421,7 @@ export function PullPage() {
           {(
             [
               ['hideTests', 'hide tests'],
+              ['hideDocs', 'hide docs'],
               ['hideGenerated', 'hide generated'],
               ['hideViewed', 'hide viewed'],
             ] as [Filter, string][]
@@ -327,21 +431,21 @@ export function PullPage() {
               onClick={() => toggleFilter(key)}
               className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
                 filters.has(key)
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                  ? 'bg-accent text-accent-ink'
+                  : 'bg-raised text-muted hover:bg-line hover:text-ink'
               }`}
             >
               {label}
             </button>
           ))}
           {hiddenCount > 0 && (
-            <span className="ml-1 text-[11px] text-zinc-600">{hiddenCount} hidden</span>
+            <span className="ml-1 text-[11px] text-faint">{hiddenCount} hidden</span>
           )}
           <span
-            className="ml-2 hidden font-mono text-[10px] text-zinc-600 md:inline"
-            title="Keyboard review: j/k next/prev file · v mark viewed · o expand/collapse · ⌘F search"
+            className="ml-2 hidden font-mono text-[10px] text-faint md:inline"
+            title="Keyboard review: j/k next/prev file · v mark viewed · o expand/collapse · ⌘F search · ⌘K commands"
           >
-            j k v o ⌘F
+            j k v o ⌘F ⌘K
           </span>
         </span>
       </div>
@@ -359,7 +463,7 @@ export function PullPage() {
           />
         ))}
         {visibleGroups.length === 0 && !loadingMore && (
-          <p className="py-10 text-center text-sm text-zinc-500">
+          <p className="py-10 text-center text-sm text-muted">
             Everything is hidden by the current filters — nothing left to review. 🎉
           </p>
         )}
@@ -378,6 +482,7 @@ export function PullPage() {
 
       <Minimap depsKey={`${files.length}:${loadingMore}:${visibleGroups.length}`} />
       <SearchPalette files={files} open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
     </div>
   );
 }

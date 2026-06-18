@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/0xdeafcafe/vibecheck/internal/classify"
+	"github.com/0xdeafcafe/vibecheck/internal/diffshape"
 	"github.com/0xdeafcafe/vibecheck/internal/ghapp"
 	"github.com/0xdeafcafe/vibecheck/internal/session"
 )
@@ -139,12 +140,15 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, sess *session.
 // --- pull requests ---
 
 type classifiedFile struct {
-	Filename  string           `json:"filename"`
-	Status    string           `json:"status"`
-	Additions int              `json:"additions"`
-	Deletions int              `json:"deletions"`
-	Patch     string           `json:"patch,omitempty"`
-	Stratum   classify.Stratum `json:"stratum"`
+	Filename         string           `json:"filename"`
+	Status           string           `json:"status"`
+	Additions        int              `json:"additions"`
+	Deletions        int              `json:"deletions"`
+	Patch            string           `json:"patch,omitempty"`
+	Stratum          classify.Stratum `json:"stratum"`
+	PreviousFilename string           `json:"previousFilename,omitempty"`
+	Mechanical       bool             `json:"mechanical,omitempty"`
+	Signature        string           `json:"signature,omitempty"`
 }
 
 type tally struct {
@@ -221,13 +225,17 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request, sess *sessio
 		out.Summary = summary
 	}
 	for _, f := range files {
+		mech, sig := diffshape.Analyze(f.Patch)
 		out.Files = append(out.Files, classifiedFile{
-			Filename:  f.Filename,
-			Status:    f.Status,
-			Additions: f.Additions,
-			Deletions: f.Deletions,
-			Patch:     f.Patch,
-			Stratum:   classify.File(f.Filename, false),
+			Filename:         f.Filename,
+			Status:           f.Status,
+			Additions:        f.Additions,
+			Deletions:        f.Deletions,
+			Patch:            f.Patch,
+			Stratum:          classify.File(f.Filename, false),
+			PreviousFilename: f.PreviousFilename,
+			Mechanical:       mech,
+			Signature:        sig,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)

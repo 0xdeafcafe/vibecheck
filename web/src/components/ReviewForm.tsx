@@ -13,9 +13,9 @@ interface Props {
 type Verdict = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT';
 
 const VERDICTS: { value: Verdict; label: string; active: string }[] = [
-  { value: 'APPROVE', label: 'Approve', active: 'bg-emerald-600 text-white' },
-  { value: 'REQUEST_CHANGES', label: 'Request changes', active: 'bg-red-600 text-white' },
-  { value: 'COMMENT', label: 'Comment', active: 'bg-zinc-600 text-white' },
+  { value: 'APPROVE', label: 'Approve', active: 'bg-add text-white' },
+  { value: 'REQUEST_CHANGES', label: 'Request changes', active: 'bg-del text-white' },
+  { value: 'COMMENT', label: 'Comment', active: 'bg-st-core text-white' },
 ];
 
 export function ReviewForm({ owner, repo, number, commitId, drafts, onRemoveDraft }: Props) {
@@ -47,7 +47,7 @@ export function ReviewForm({ owner, repo, number, commitId, drafts, onRemoveDraf
 
   if (done) {
     return (
-      <footer className="mt-8 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300">
+      <footer className="mt-8 rounded-xl border border-add/30 bg-add-soft p-4 text-sm text-add">
         ✓ Review submitted — it’s now on{' '}
         <a
           className="underline"
@@ -61,20 +61,20 @@ export function ReviewForm({ owner, repo, number, commitId, drafts, onRemoveDraf
   }
 
   return (
-    <footer className="mt-8 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 pb-5">
-      <h2 className="mb-2 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+    <footer className="mt-8 rounded-xl border border-line bg-surface p-4 pb-5">
+      <h2 className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted">
         Your review {drafts.length > 0 && `· ${drafts.length} pending comment(s)`}
       </h2>
       {drafts.length > 0 && (
         <ul className="mb-3 flex flex-col gap-1">
           {drafts.map((d, i) => (
             <li key={i} className="flex items-baseline gap-2 text-xs">
-              <code className="shrink-0 font-mono text-violet-300">
+              <code className="shrink-0 font-mono text-accent">
                 {d.path}:{d.line}
               </code>
-              <span className="text-zinc-300">{d.body}</span>
+              <span className="text-ink">{d.body}</span>
               <button
-                className="ml-auto shrink-0 text-zinc-500 underline hover:text-zinc-300"
+                className="ml-auto shrink-0 text-muted underline hover:text-ink"
                 onClick={() => onRemoveDraft(i)}
               >
                 remove
@@ -87,16 +87,16 @@ export function ReviewForm({ owner, repo, number, commitId, drafts, onRemoveDraf
         value={summary}
         onChange={(e) => setSummary(e.target.value)}
         placeholder="Review summary…"
-        className="min-h-20 w-full rounded-md border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-200 outline-none focus:border-violet-500"
+        className="min-h-20 w-full rounded-md border border-line bg-canvas p-2 text-sm text-ink outline-none focus:border-accent"
       />
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-md border border-zinc-700 text-xs">
+        <div className="flex overflow-hidden rounded-md border border-line text-xs">
           {VERDICTS.map((v) => (
             <button
               key={v.value}
               onClick={() => setVerdict(v.value)}
               className={`px-3 py-1.5 font-medium ${
-                verdict === v.value ? v.active : 'text-zinc-400 hover:bg-zinc-800'
+                verdict === v.value ? v.active : 'text-muted hover:bg-raised'
               }`}
             >
               {v.label}
@@ -106,13 +106,13 @@ export function ReviewForm({ owner, repo, number, commitId, drafts, onRemoveDraf
         <button
           disabled={submitting}
           onClick={submit}
-          className="ml-auto rounded-md bg-violet-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+          className="ml-auto rounded-md bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-50"
         >
           {submitting ? 'Submitting…' : 'Submit review'}
         </button>
       </div>
       {error && (
-        <p className="mt-2 text-xs text-red-400">
+        <p className="mt-2 text-xs text-del">
           Submission failed: {error} — your comments and verdict are still here.
         </p>
       )}

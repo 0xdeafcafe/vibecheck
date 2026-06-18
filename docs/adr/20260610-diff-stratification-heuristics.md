@@ -76,3 +76,31 @@ stratum is visible and expandable; nothing is hidden irrecoverably.
 - Good: always correct where present.
 - Bad: useless on the vast majority of repos with no config — fails the
   zero-setup driver.
+
+## Amendment (2026-06-18): docs stratum + mechanical clustering
+
+Two heuristic additions, consistent with the "advisory, never
+destructive" rule and the expectation that the heuristic list would grow.
+
+1. **`docs` stratum.** Generic prose (`.md`/`.mdx`/`.markdown`/`.rst`/
+   `.adoc` anywhere; any `docs/` segment; top-level README/CHANGELOG/
+   CONTRIBUTING) previously fell through to **core**, polluting the reading
+   surface. It now classifies as **docs**, slotted after tests and before
+   generated in reading order. ADRs and `*.feature` still win as **intent**
+   (the docs step runs after intent). One-line additions to `classify.go`
+   with table-driven test rows.
+
+2. **Mechanical clustering — a new, cross-stratum dimension.** Path-based
+   stratification can't see that 31 one-line files are all the *same* edit
+   (e.g. an import rename). A new `internal/diffshape` pass reads each
+   file's patch and reports `(mechanical, signature)`: a file is
+   *mechanical* when its entire patch reduces to one repeated token swap,
+   and `signature` is the canonical `old → new` edit. The frontend groups
+   files sharing a signature (≥4) into a single collapsed "cluster" group
+   that sinks below every stratum — noise you scan once, not review
+   file-by-file. GitHub's `previous_filename` is also surfaced so true
+   renames read as `A → B`. Detection is language-agnostic string work on
+   the server; clustering is presentation on the client.
+
+   See [20260618-visual-design-system.md](20260618-visual-design-system.md)
+   for how clusters render.

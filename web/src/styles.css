@@ -1,79 +1,138 @@
 @import 'tailwindcss';
 
+/* ---------------------------------------------------------------------------
+   vibecheck design system — see docs/adr/20260618-visual-design-system.md
+
+   Type:   serif (Fraunces) for display moments, sans (Inter) for the dense
+           working surface, mono (JetBrains) for code + paths.
+   Colour: warm-white canvas, deep-navy ink. Blue = primary brand/action,
+           orange = the "spark". Green/red are RESERVED for diff add/remove
+           and strata never reuse them.
+   Theme:  light is the default; theme.ts sets data-theme="dark" on <html>
+           (from system or a manual toggle) to swap the --color-* values.
+--------------------------------------------------------------------------- */
+
 @theme {
-  --font-mono:
-    ui-monospace, 'SF Mono', Menlo, 'Cascadia Code', monospace;
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Fraunces Variable', ui-serif, Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, 'Cascadia Code', monospace;
+
+  /* surfaces */
+  --color-canvas: #fbfaf7;
+  --color-surface: #ffffff;
+  --color-raised: #f3f1ea;
+  --color-line: #e7e3d9;
+  --color-line-strong: #d6d0c2;
+
+  /* text */
+  --color-ink: #15243a;
+  --color-muted: #59647a;
+  --color-faint: #98a1ae;
+
+  /* brand: blue primary + orange spark */
+  --color-accent: #2f6fed;
+  --color-accent-hover: #1f5fd8;
+  --color-accent-ink: #ffffff;
+  --color-accent-soft: rgba(47, 111, 237, 0.1);
+  --color-spark: #e0742a;
+  --color-spark-soft: rgba(224, 116, 42, 0.12);
+
+  /* reserved: diff semantics */
+  --color-add: #1f8b3b;
+  --color-add-soft: rgba(31, 139, 59, 0.13);
+  --color-del: #cf463e;
+  --color-del-soft: rgba(207, 70, 62, 0.11);
+
+  /* strata dots — intent reuses brand blue; tests is teal so green stays
+     "added" only; docs amber; mechanical lavender; generated muted */
+  --color-st-intent: #2f6fed;
+  --color-st-core: #45556c;
+  --color-st-tests: #0f9488;
+  --color-st-docs: #cf8324;
+  --color-st-generated: #9a9384;
+  --color-st-mech: #7c78cf;
+}
+
+/* dark = warm navy charcoal, not pure black: keeps Orchid's navy soul */
+:root {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-canvas: #0e1620;
+  --color-surface: #141d2a;
+  --color-raised: #1b2533;
+  --color-line: #273241;
+  --color-line-strong: #38434f;
+
+  --color-ink: #ece8e0;
+  --color-muted: #9aa4b2;
+  --color-faint: #6b7686;
+
+  --color-accent: #5b9bff;
+  --color-accent-hover: #77adff;
+  --color-accent-ink: #0b1220;
+  --color-accent-soft: rgba(91, 155, 255, 0.16);
+  --color-spark: #f2944a;
+  --color-spark-soft: rgba(242, 148, 74, 0.16);
+
+  --color-add: #3fb950;
+  --color-add-soft: rgba(63, 185, 80, 0.16);
+  --color-del: #f85149;
+  --color-del-soft: rgba(248, 81, 73, 0.15);
+
+  --color-st-intent: #5b9bff;
+  --color-st-core: #8595ab;
+  --color-st-tests: #2dd4bf;
+  --color-st-docs: #f0a83a;
+  --color-st-generated: #8b8475;
+  --color-st-mech: #a6a2f2;
 }
 
 body {
-  background: oklch(14.5% 0.004 285.8); /* zinc-950 */
-  color: oklch(87.1% 0.006 286); /* zinc-300 */
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-accent-soft);
+}
+
+/* Fraunces tuned warm + a touch tight — the brand display face. Italic of
+   the same family is the emphasis voice (cf. Orchid's "personal assistant"). */
+.font-display {
+  font-family: var(--font-serif);
+  font-variation-settings: 'opsz' 40, 'SOFT' 40, 'wght' 460;
+  letter-spacing: -0.012em;
+}
+.font-display em,
+.font-display i {
+  font-variation-settings: 'opsz' 36, 'SOFT' 60, 'wght' 440;
 }
 
 /* Diff row tints — applied per-<tr>, cheaper than utility classes on
    thousands of rows. */
 .diff-add {
-  background: rgba(46, 160, 67, 0.14);
-}
-.diff-add .lineno {
-  background: rgba(46, 160, 67, 0.18);
+  background: var(--color-add-soft);
 }
 .diff-del {
-  background: rgba(248, 81, 73, 0.13);
-}
-.diff-del .lineno {
-  background: rgba(248, 81, 73, 0.17);
+  background: var(--color-del-soft);
 }
 .diff-hunk {
-  background: rgba(56, 139, 253, 0.08);
-  color: rgb(110, 118, 129);
+  background: var(--color-accent-soft);
+  color: var(--color-faint);
 }
 tr:hover .add-comment {
   visibility: visible;
 }
 
-/* highlight.js — minimal dark token palette tuned to the zinc theme */
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-built_in,
-.hljs-tag {
-  color: #ff7b72;
-}
-.hljs-string,
-.hljs-attr,
-.hljs-regexp {
-  color: #a5d6ff;
-}
-.hljs-title,
-.hljs-title.function_,
-.hljs-title.class_ {
-  color: #d2a8ff;
-}
-.hljs-number,
-.hljs-literal,
-.hljs-symbol {
-  color: #79c0ff;
-}
-.hljs-comment,
-.hljs-quote,
-.hljs-meta {
-  color: #8b949e;
-}
-.hljs-variable,
-.hljs-template-variable,
-.hljs-name {
-  color: #ffa657;
-}
-
-/* sticky group headers need an opaque-ish background while stuck */
-.bg-zinc-925 {
-  background: oklch(18% 0.005 285.8 / 0.97);
-}
-
 /* keyboard review focus (j/k) */
 details[data-file].kbd-focus {
-  outline: 1px solid oklch(60% 0.2 295 / 0.7); /* violet ring */
+  outline: 2px solid var(--color-accent);
   outline-offset: 1px;
+  border-radius: 0.5rem;
 }
 
 /* rendered GitHub markdown (PR bodies, comments) */
@@ -96,13 +155,13 @@ details[data-file].kbd-focus {
   list-style: decimal;
 }
 .markdown code {
-  background: oklch(27% 0.005 285.8);
+  background: var(--color-raised);
   border-radius: 4px;
   padding: 0.1em 0.3em;
   font-size: 0.92em;
 }
 .markdown pre {
-  background: oklch(21% 0.005 285.8);
+  background: var(--color-raised);
   border-radius: 6px;
   padding: 0.5em 0.75em;
   overflow-x: auto;
@@ -112,7 +171,7 @@ details[data-file].kbd-focus {
   padding: 0;
 }
 .markdown a {
-  color: oklch(71% 0.14 295);
+  color: var(--color-accent);
   text-decoration: underline;
 }
 .markdown h1,
@@ -120,13 +179,13 @@ details[data-file].kbd-focus {
 .markdown h3,
 .markdown h4 {
   font-weight: 600;
-  color: oklch(92% 0.004 285.8);
+  color: var(--color-ink);
   margin: 0.6em 0 0.3em;
 }
 .markdown blockquote {
-  border-left: 3px solid oklch(35% 0.005 285.8);
+  border-left: 3px solid var(--color-line-strong);
   padding-left: 0.75em;
-  color: oklch(60% 0.005 285.8);
+  color: var(--color-muted);
 }
 .markdown table {
   border-collapse: collapse;
@@ -134,7 +193,7 @@ details[data-file].kbd-focus {
 }
 .markdown th,
 .markdown td {
-  border: 1px solid oklch(32% 0.005 285.8);
+  border: 1px solid var(--color-line);
   padding: 0.25em 0.6em;
 }
 
@@ -142,7 +201,7 @@ details[data-file].kbd-focus {
 @keyframes flash-bg {
   0%,
   30% {
-    background: rgba(139, 92, 246, 0.35);
+    background: var(--color-accent-soft);
   }
   100% {
     background: transparent;

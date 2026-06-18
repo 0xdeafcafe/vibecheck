@@ -2,7 +2,7 @@
 // docs/adr/20260610-diff-stratification-heuristics.md.
 //
 // Every changed file is assigned exactly one stratum. Order is
-// first-match-wins: generated, intent, tests, then core as the fallback.
+// first-match-wins: generated, intent, docs, tests, then core as the fallback.
 // Classification is advisory presentation only — callers must never hide
 // a file irrecoverably based on its stratum.
 package classify
@@ -17,6 +17,7 @@ type Stratum string
 const (
 	Generated Stratum = "generated"
 	Intent    Stratum = "intent"
+	Docs      Stratum = "docs"
 	Tests     Stratum = "tests"
 	Core      Stratum = "core"
 )
@@ -48,6 +49,10 @@ var intentDirPrefixes = []string{
 	"docs/adr/", "docs/decisions/", "docs/architecture/decisions/",
 	"docs/rfc/", "adr/", "decisions/",
 }
+
+var docSuffixes = []string{".md", ".mdx", ".markdown", ".rst", ".adoc"}
+
+var docRootNames = []string{"readme", "changelog", "contributing"}
 
 var testSegments = []string{"tests", "test", "__tests__", "spec", "testdata"}
 
@@ -90,7 +95,29 @@ func File(p string, generatedAttr bool) Stratum {
 		}
 	}
 
-	// 3. Tests
+	// 3. Docs
+	for _, seg := range segments {
+		if seg == "docs" {
+			return Docs
+		}
+	}
+	for _, s := range docSuffixes {
+		if strings.HasSuffix(lower, s) {
+			return Docs
+		}
+	}
+	// Top-level README/CHANGELOG/CONTRIBUTING in any extension/case.
+	if len(segments) == 1 && segments[0] == "." {
+		for _, n := range docRootNames {
+			if base == n || strings.HasPrefix(base, n+".") {
+				return Docs
+			}
+		}
+	}
+	// *.txt is prose only under a docs/ segment (handled above); a root
+	// requirements.txt stays Core.
+
+	// 4. Tests
 	if strings.HasSuffix(lower, "_test.go") {
 		return Tests
 	}
@@ -106,6 +133,6 @@ func File(p string, generatedAttr bool) Stratum {
 		}
 	}
 
-	// 4. Core (fallback)
+	// 5. Core (fallback)
 	return Core
 }

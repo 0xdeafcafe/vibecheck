@@ -1,4 +1,4 @@
-export type Stratum = 'intent' | 'core' | 'tests' | 'generated';
+export type Stratum = 'intent' | 'core' | 'tests' | 'docs' | 'generated';
 
 export interface Me {
   login: string;
@@ -22,10 +22,17 @@ export interface PullRequest {
 export interface ClassifiedFile {
   filename: string;
   status: string;
+  previousFilename?: string; // set when status === 'renamed'
   additions: number;
   deletions: number;
   patch?: string;
   stratum: Stratum;
+  // Server-side diff-shape heuristics: a file whose entire patch is one
+  // repeated token swap (e.g. an import rename) is "mechanical", and
+  // `signature` is the shared "old → new" edit used to cluster it with
+  // its siblings.
+  mechanical?: boolean;
+  signature?: string;
 }
 
 export interface Tally {

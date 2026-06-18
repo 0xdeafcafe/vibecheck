@@ -23,11 +23,19 @@ func TestFile(t *testing.T) {
 		// generated wins over tests when attribute is set
 		{"pkg/thing_test.go", true, Generated},
 
-		// Intent
+		// Intent (must still win over docs)
 		{"docs/adr/20260610-system-architecture.md", false, Intent},
 		{"docs/decisions/0042-thing.md", false, Intent},
 		{"specs/review-a-pull-request.feature", false, Intent},
+		{"specs/x.feature", false, Intent},
 		{"backend/docs/rfc/001-proposal.md", false, Intent},
+
+		// Docs
+		{"docs/ai-governance/data-privacy.mdx", false, Docs},
+		{"dev/docs/best_practices/copywriting.md", false, Docs},
+		{"README.md", false, Docs},
+		{"docs/llms-full.txt", false, Docs},
+		{"guide.md", false, Docs}, // top-level markdown
 
 		// Tests
 		{"internal/classify/classify_test.go", false, Tests},
@@ -40,10 +48,7 @@ func TestFile(t *testing.T) {
 		// Core fallback
 		{"cmd/api/main.go", false, Core},
 		{"web/src/App.tsx", false, Core},
-		{"README.md", false, Core},
-		{"docs/guide.md", false, Core},
-		// "specification" dir should not match the "spec" segment
-		{"specification/api.md", false, Core},
+		{"requirements.txt", false, Core}, // root .txt is not docs
 	}
 
 	for _, c := range cases {

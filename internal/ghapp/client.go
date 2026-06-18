@@ -59,11 +59,12 @@ type PullRequest struct {
 }
 
 type PullFile struct {
-	Filename  string `json:"filename"`
-	Status    string `json:"status"`
-	Additions int    `json:"additions"`
-	Deletions int    `json:"deletions"`
-	Patch     string `json:"patch"`
+	Filename         string `json:"filename"`
+	Status           string `json:"status"`
+	Additions        int    `json:"additions"`
+	Deletions        int    `json:"deletions"`
+	Patch            string `json:"patch"`
+	PreviousFilename string `json:"previous_filename"` // set on renames/moves
 }
 
 // Review is a submitted PR review (verdict-level).

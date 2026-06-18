@@ -1,10 +1,13 @@
 import { ClassifiedFile, Stratum } from './api';
 
-// A review group is the unit of triage: a folder's worth of related
-// files you review (or skip) together.
+// A review group is the unit of triage: a folder's worth of related files
+// you review (or skip) together, or a "cluster" of mechanically-identical
+// edits (one rename touching many files) that you scan once.
 export interface ReviewGroup {
-  id: string; // directory path, '' = repo root
+  id: string; // directory path ('' = repo root) or `cluster:<signature>`
   label: string;
+  kind: 'dir' | 'cluster';
+  signature?: string; // cluster groups: the shared "old → new" edit
   files: ClassifiedFile[];
   strata: Partial<Record<Stratum, number>>;
   dominant: Stratum;
@@ -12,33 +15,47 @@ export interface ReviewGroup {
   deletions: number;
 }
 
-const STRATUM_ORDER: Stratum[] = ['intent', 'core', 'tests', 'generated'];
+const STRATUM_ORDER: Stratum[] = ['intent', 'core', 'tests', 'docs', 'generated'];
+const MIN_GROUP = 3; // dir groups smaller than this merge into their parent
+const MIN_CLUSTER = 4; // a mechanical edit shared by >= this many files clusters
 
 function dirname(path: string): string {
   const i = path.lastIndexOf('/');
   return i === -1 ? '' : path.slice(0, i);
 }
+const parentDir = dirname;
 
-function parentDir(dir: string): string {
-  return dirname(dir);
-}
-
-// Group files by directory, then merge tiny deep directories upward
-// until every group is a meaningful unit of review. Pure heuristic —
-// same philosophy as stratification: advisory, never destructive.
+// Group files by directory, after first pulling out mechanical clusters.
+// Pure heuristic — same philosophy as stratification: advisory, never
+// destructive.
 export function buildGroups(files: ClassifiedFile[]): ReviewGroup[] {
-  const MIN_GROUP = 3; // groups smaller than this get merged into their parent
+  // 1. Pull out "mechanical" clusters — one rename / identifier swap that
+  // touched many files (e.g. an import path change). These are noise you
+  // scan once, not review file-by-file, so they get their own collapsed
+  // group instead of being scattered through the directory tree.
+  const sigCount = new Map<string, number>();
+  for (const f of files) {
+    if (f.mechanical && f.signature) {
+      sigCount.set(f.signature, (sigCount.get(f.signature) ?? 0) + 1);
+    }
+  }
+  const clusterSigs = new Set<string>();
+  for (const [sig, n] of sigCount) if (n >= MIN_CLUSTER) clusterSigs.add(sig);
+
+  const isClustered = (f: ClassifiedFile) =>
+    !!(f.mechanical && f.signature && clusterSigs.has(f.signature));
+
+  // 2. Directory-group everything that isn't clustered, then merge tiny
+  // deep directories upward until every group is a meaningful unit.
   const byDir = new Map<string, ClassifiedFile[]>();
   for (const f of files) {
+    if (isClustered(f)) continue;
     const d = dirname(f.filename);
     const list = byDir.get(d) ?? [];
     list.push(f);
     byDir.set(d, list);
   }
 
-  // Merge upward: deepest-first, fold small groups into their parent
-  // (unless they're already at the root, or merging would bury a
-  // different stratum — keep tests/generated separate from core).
   for (;;) {
     const dirs = [...byDir.keys()].sort(
       (a, b) => b.split('/').length - a.split('/').length,
@@ -62,35 +79,60 @@ export function buildGroups(files: ClassifiedFile[]): ReviewGroup[] {
     if (!merged) break;
   }
 
-  const groups: ReviewGroup[] = [...byDir.entries()].map(([id, fs]) => {
-    const strata: Partial<Record<Stratum, number>> = {};
-    let additions = 0;
-    let deletions = 0;
-    for (const f of fs) {
-      strata[f.stratum] = (strata[f.stratum] ?? 0) + 1;
-      additions += f.additions;
-      deletions += f.deletions;
-    }
-    fs.sort((a, b) => a.filename.localeCompare(b.filename));
-    return {
-      id,
-      label: id === '' ? '(repo root)' : id,
-      files: fs,
-      strata,
-      dominant: dominantStratum(fs),
-      additions,
-      deletions,
-    };
-  });
+  const dirGroups: ReviewGroup[] = [...byDir.entries()].map(([id, fs]) =>
+    makeGroup(id, id === '' ? '(repo root)' : id, 'dir', fs),
+  );
 
-  // Reading order: intent first, then core, tests, generated; within a
-  // stratum, biggest churn first — that's usually where review starts.
-  groups.sort((a, b) => {
-    const so = STRATUM_ORDER.indexOf(a.dominant) - STRATUM_ORDER.indexOf(b.dominant);
-    if (so !== 0) return so;
+  // 3. One cluster group per shared signature.
+  const clusterGroups: ReviewGroup[] = [...clusterSigs].map((sig) =>
+    makeGroup(
+      `cluster:${sig}`,
+      sig,
+      'cluster',
+      files.filter((f) => f.signature === sig && isClustered(f)),
+      sig,
+    ),
+  );
+
+  // 4. Reading order: intent → core → tests → docs → generated, biggest
+  // churn first within a stratum; mechanical clusters always sink to the
+  // bottom — they're the last thing you look at.
+  const rank = (g: ReviewGroup) =>
+    g.kind === 'cluster' ? STRATUM_ORDER.length : STRATUM_ORDER.indexOf(g.dominant);
+  return [...dirGroups, ...clusterGroups].sort((a, b) => {
+    const r = rank(a) - rank(b);
+    if (r !== 0) return r;
     return b.additions + b.deletions - (a.additions + a.deletions);
   });
-  return groups;
+}
+
+function makeGroup(
+  id: string,
+  label: string,
+  kind: 'dir' | 'cluster',
+  files: ClassifiedFile[],
+  signature?: string,
+): ReviewGroup {
+  const strata: Partial<Record<Stratum, number>> = {};
+  let additions = 0;
+  let deletions = 0;
+  for (const f of files) {
+    strata[f.stratum] = (strata[f.stratum] ?? 0) + 1;
+    additions += f.additions;
+    deletions += f.deletions;
+  }
+  files.sort((a, b) => a.filename.localeCompare(b.filename));
+  return {
+    id,
+    label,
+    kind,
+    signature,
+    files,
+    strata,
+    dominant: dominantStratum(files),
+    additions,
+    deletions,
+  };
 }
 
 function dominantStratum(fs: ClassifiedFile[]): Stratum {
