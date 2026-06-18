@@ -56,6 +56,7 @@ export function GroupCard({
     <details
       data-group={group.id}
       data-minimap={isCluster ? 'generated' : group.dominant}
+      data-owned={group.owned > 0 ? '' : undefined}
       open={open}
       onToggle={(e) => setOpen(e.currentTarget.open)}
       className={`overflow-hidden rounded-xl border bg-surface ${
@@ -86,6 +87,14 @@ export function GroupCard({
                 </span>
               ))}
             </span>
+            {group.owned > 0 && (
+              <span
+                className="shrink-0 rounded-sm bg-accent-soft px-1 text-[10px] font-semibold uppercase tracking-wide text-accent"
+                title="You own files here (CODEOWNERS)"
+              >
+                yours{group.owned < group.files.length ? ` ·${group.owned}` : ''}
+              </span>
+            )}
           </>
         )}
         {commentCount > 0 && (

@@ -23,7 +23,7 @@ import { renderMarkdown } from '../markdown';
 import { setPref } from '../theme';
 import { useViewed } from '../viewed';
 
-type Filter = 'hideTests' | 'hideGenerated' | 'hideDocs' | 'hideViewed';
+type Filter = 'mine' | 'hideTests' | 'hideGenerated' | 'hideDocs' | 'hideViewed';
 
 export function PullPage() {
   const { owner = '', repo = '', number = '' } = useParams();
@@ -38,6 +38,7 @@ export function PullPage() {
   const [drafts, setDrafts] = useState<DraftComment[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [aiAuthored, setAiAuthored] = useState(false);
   const [filters, setFilters] = useState<Set<Filter>>(new Set());
 
   const { viewed, setFileViewed, setManyViewed } = useViewed(owner, repo, prNumber);
@@ -135,6 +136,7 @@ export function PullPage() {
           if (page === 1) {
             setPr(resp.pr);
             setSummary(resp.summary);
+            setAiAuthored(!!resp.aiAuthored);
           }
           setFiles((prev) => [...prev, ...resp.files]);
           if (!resp.hasMore) break;
@@ -179,6 +181,7 @@ export function PullPage() {
         .map((g) => ({
           ...g,
           files: g.files.filter((f) => {
+            if (filters.has('mine') && !f.ownedByViewer) return false;
             if (filters.has('hideTests') && f.stratum === 'tests') return false;
             if (filters.has('hideGenerated') && f.stratum === 'generated') return false;
             if (filters.has('hideDocs') && f.stratum === 'docs') return false;
@@ -215,6 +218,26 @@ export function PullPage() {
       flt('hideDocs', 'Toggle hide docs'),
       flt('hideGenerated', 'Toggle hide generated'),
       flt('hideViewed', 'Toggle hide viewed'),
+      ...(files.some((f) => f.ownedByViewer)
+        ? [
+            {
+              id: 'mine',
+              group: 'Filter',
+              label: 'Only my owned areas',
+              hint: filters.has('mine') ? 'on' : '',
+              run: () => toggleFilter('mine'),
+            },
+            {
+              id: 'j-mine',
+              group: 'Jump',
+              label: 'Jump to your areas',
+              run: () =>
+                document
+                  .querySelector('details[data-group][data-owned]')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+            },
+          ]
+        : []),
       { id: 'expand', group: 'View', label: 'Expand all', run: () => setOpenAll(true) },
       { id: 'collapse', group: 'View', label: 'Collapse all', run: () => setOpenAll(false) },
       {
@@ -252,6 +275,8 @@ export function PullPage() {
   }, [files, filters, pr, setManyViewed, navigate]);
 
   const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
+  const ownedCount = files.filter((f) => f.ownedByViewer).length;
+  const unownedCount = files.filter((f) => f.unowned).length;
   const hiddenCount =
     files.length - visibleGroups.reduce((n, g) => n + g.files.length, 0);
 
@@ -401,6 +426,30 @@ export function PullPage() {
         </div>
       </details>
 
+      {/* Review-plan cockpit: who you are on this PR (CODEOWNERS) plus the
+          provenance cue. Your owned areas are sorted to the top of the list. */}
+      {(ownedCount > 0 || aiAuthored || unownedCount > 0) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2 text-xs">
+          {ownedCount > 0 && (
+            <span className="font-medium text-accent">
+              Your areas — you own {ownedCount} of {files.length} files
+            </span>
+          )}
+          {aiAuthored && (
+            <span
+              className="rounded-sm bg-spark-soft px-1.5 py-px font-medium text-spark"
+              title="This PR contains AI-authored commits"
+            >
+              AI-authored — verify, don’t skim
+            </span>
+          )}
+          {unownedCount > 0 && <span className="text-muted">{unownedCount} unowned</span>}
+          {ownedCount > 0 && (
+            <span className="ml-auto text-faint">your areas are sorted first</span>
+          )}
+        </div>
+      )}
+
       {/* Triage bar: overall burn-down + what to hide. Sticky so the
           progress is always in view while working through groups. */}
       <div className="sticky top-0 z-30 -mx-4 mt-3 mb-4 flex flex-wrap items-center gap-3 border-b border-line bg-canvas/95 px-4 py-2 backdrop-blur">
@@ -420,6 +469,7 @@ export function PullPage() {
         <span className="ml-auto flex items-center gap-1.5">
           {(
             [
+              ...(ownedCount > 0 ? [['mine', 'only my areas']] : []),
               ['hideTests', 'hide tests'],
               ['hideDocs', 'hide docs'],
               ['hideGenerated', 'hide generated'],

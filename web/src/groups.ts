@@ -13,6 +13,7 @@ export interface ReviewGroup {
   dominant: Stratum;
   additions: number;
   deletions: number;
+  owned: number; // files in this group the signed-in viewer owns (CODEOWNERS)
 }
 
 const STRATUM_ORDER: Stratum[] = ['intent', 'core', 'tests', 'docs', 'generated'];
@@ -94,13 +95,18 @@ export function buildGroups(files: ClassifiedFile[]): ReviewGroup[] {
     ),
   );
 
-  // 4. Reading order: intent → core → tests → docs → generated, biggest
-  // churn first within a stratum; mechanical clusters always sink to the
-  // bottom — they're the last thing you look at.
-  const rank = (g: ReviewGroup) =>
-    g.kind === 'cluster' ? STRATUM_ORDER.length : STRATUM_ORDER.indexOf(g.dominant);
+  // 4. Reading order = the review plan. Mechanical clusters always sink to
+  // the bottom; then YOUR areas first (CODEOWNERS ownership — the
+  // reviewer-fit axis); then the stratum order (intent → core → tests →
+  // docs → generated); then biggest churn first.
   return [...dirGroups, ...clusterGroups].sort((a, b) => {
-    const r = rank(a) - rank(b);
+    const ac = a.kind === 'cluster' ? 1 : 0;
+    const bc = b.kind === 'cluster' ? 1 : 0;
+    if (ac !== bc) return ac - bc;
+    const ao = a.owned > 0 ? 0 : 1;
+    const bo = b.owned > 0 ? 0 : 1;
+    if (ao !== bo) return ao - bo;
+    const r = STRATUM_ORDER.indexOf(a.dominant) - STRATUM_ORDER.indexOf(b.dominant);
     if (r !== 0) return r;
     return b.additions + b.deletions - (a.additions + a.deletions);
   });
@@ -116,10 +122,12 @@ function makeGroup(
   const strata: Partial<Record<Stratum, number>> = {};
   let additions = 0;
   let deletions = 0;
+  let owned = 0;
   for (const f of files) {
     strata[f.stratum] = (strata[f.stratum] ?? 0) + 1;
     additions += f.additions;
     deletions += f.deletions;
+    if (f.ownedByViewer) owned++;
   }
   files.sort((a, b) => a.filename.localeCompare(b.filename));
   return {
@@ -132,6 +140,7 @@ function makeGroup(
     dominant: dominantStratum(files),
     additions,
     deletions,
+    owned,
   };
 }
 

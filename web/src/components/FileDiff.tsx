@@ -110,6 +110,25 @@ export function FileDiff({
         {summary ? (
           <span className="min-w-0 flex-1 truncate font-sans text-muted">{summary}</span>
         ) : null}
+        {file.ownedByViewer ? (
+          <span
+            className="shrink-0 rounded-sm bg-accent-soft px-1 text-[10px] font-semibold uppercase tracking-wide text-accent"
+            title="You own this file (CODEOWNERS)"
+          >
+            yours
+          </span>
+        ) : file.unowned ? (
+          <span className="shrink-0 text-[10px] uppercase tracking-wide text-faint" title="No CODEOWNERS owner">
+            unowned
+          </span>
+        ) : file.owners && file.owners.length > 0 ? (
+          <span
+            className="shrink-0 truncate font-mono text-[11px] text-faint"
+            title={`Owners: ${file.owners.join(', ')}`}
+          >
+            {file.owners[0]}
+          </span>
+        ) : null}
         {comments.length > 0 && <span className="text-spark">💬 {comments.length}</span>}
         <span className="ml-auto font-mono text-[11px]">
           <span className="text-add">+{file.additions}</span>{' '}

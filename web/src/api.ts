@@ -33,6 +33,12 @@ export interface ClassifiedFile {
   // its siblings.
   mechanical?: boolean;
   signature?: string;
+  // Ownership from CODEOWNERS (the reviewer-fit signal): who owns the
+  // file, whether the signed-in viewer owns it, and whether it has no
+  // owner at all (an accountability gap).
+  owners?: string[];
+  ownedByViewer?: boolean;
+  unowned?: boolean;
 }
 
 export interface Tally {
@@ -71,6 +77,8 @@ export interface PullResponse {
   page: number;
   hasMore: boolean;
   summary?: ReviewSummary;
+  // Provenance: the PR carries AI-authored commits (verify, don't skim).
+  aiAuthored?: boolean;
 }
 
 export interface DraftComment {

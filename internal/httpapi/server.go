@@ -12,9 +12,11 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/0xdeafcafe/vibecheck/internal/classify"
+	"github.com/0xdeafcafe/vibecheck/internal/codeowners"
 	"github.com/0xdeafcafe/vibecheck/internal/diffshape"
 	"github.com/0xdeafcafe/vibecheck/internal/ghapp"
 	"github.com/0xdeafcafe/vibecheck/internal/session"
@@ -149,6 +151,9 @@ type classifiedFile struct {
 	PreviousFilename string           `json:"previousFilename,omitempty"`
 	Mechanical       bool             `json:"mechanical,omitempty"`
 	Signature        string           `json:"signature,omitempty"`
+	Owners           []string         `json:"owners,omitempty"`
+	OwnedByViewer    bool             `json:"ownedByViewer,omitempty"`
+	Unowned          bool             `json:"unowned,omitempty"`
 }
 
 type tally struct {
@@ -186,11 +191,12 @@ type reviewSummary struct {
 }
 
 type pullResponse struct {
-	PR      *ghapp.PullRequest `json:"pr"`
-	Files   []classifiedFile   `json:"files"`
-	Page    int                `json:"page"`
-	HasMore bool               `json:"hasMore"`
-	Summary *reviewSummary     `json:"summary,omitempty"`
+	PR         *ghapp.PullRequest `json:"pr"`
+	Files      []classifiedFile   `json:"files"`
+	Page       int                `json:"page"`
+	HasMore    bool               `json:"hasMore"`
+	Summary    *reviewSummary     `json:"summary,omitempty"`
+	AIAuthored bool               `json:"aiAuthored,omitempty"`
 }
 
 func (s *Server) handlePull(w http.ResponseWriter, r *http.Request, sess *session.Session) {
@@ -223,9 +229,16 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request, sess *sessio
 			return
 		}
 		out.Summary = summary
+		// AI-authorship is a PR-level signal — only compute it on page 1.
+		out.AIAuthored = s.aiAuthored(r, gh, owner, repo, number)
 	}
+	// CODEOWNERS isn't server state and pages are separate requests, so
+	// resolve it on every page (nil ruleset when the repo has none).
+	rules := s.codeowners(r, gh, owner, repo, pr.Base.Ref)
+	viewer := "@" + sess.Login
 	for _, f := range files {
 		mech, sig := diffshape.Analyze(f.Patch)
+		owners := rules.Owners(f.Filename) // (*Ruleset)(nil).Owners is nil-safe
 		out.Files = append(out.Files, classifiedFile{
 			Filename:         f.Filename,
 			Status:           f.Status,
@@ -236,9 +249,85 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request, sess *sessio
 			PreviousFilename: f.PreviousFilename,
 			Mechanical:       mech,
 			Signature:        sig,
+			Owners:           owners,
+			OwnedByViewer:    ownedBy(owners, viewer),
+			Unowned:          rules != nil && len(owners) == 0,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// codeownersPaths are tried in order; the first that exists wins.
+var codeownersPaths = []string{".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"}
+
+// codeowners resolves the repo's CODEOWNERS at ref, or nil if absent.
+// A fetch error is non-fatal — owners are advisory, so we log and skip.
+func (s *Server) codeowners(r *http.Request, gh *ghapp.Client, owner, repo, ref string) *codeowners.Ruleset {
+	for _, p := range codeownersPaths {
+		content, ok, err := gh.RepoFileContent(r.Context(), owner, repo, ref, p)
+		if err != nil {
+			if s.Log != nil {
+				s.Log.Warn("codeowners fetch failed", "path", p, "err", err)
+			}
+			return nil
+		}
+		if ok {
+			return codeowners.Parse(content)
+		}
+	}
+	return nil
+}
+
+// ownedBy reports whether owners contains the viewer's login (case
+// insensitive). Direct login match only — team membership isn't resolved.
+func ownedBy(owners []string, viewer string) bool {
+	for _, o := range owners {
+		if strings.EqualFold(o, viewer) {
+			return true
+		}
+	}
+	return false
+}
+
+// aiMarkers are case-insensitive substrings in a commit message that flag
+// AI authorship. Heuristic and intentionally small — false negatives are
+// preferred over false positives.
+var aiMarkers = []string{
+	"co-authored-by: claude",
+	"co-authored-by: copilot",
+	"generated with claude",
+	"noreply@anthropic.com",
+}
+
+// aiAuthored reports whether any PR commit looks AI-authored: a bot
+// author/committer, or a message carrying an AI co-author trailer.
+// A fetch error is non-fatal — log and treat the PR as human-authored.
+func (s *Server) aiAuthored(r *http.Request, gh *ghapp.Client, owner, repo string, number int) bool {
+	commits, err := gh.PullCommits(r.Context(), owner, repo, number)
+	if err != nil {
+		if s.Log != nil {
+			s.Log.Warn("pull commits fetch failed", "err", err)
+		}
+		return false
+	}
+	for _, c := range commits {
+		if c.Author.IsBot() || c.Committer.IsBot() {
+			return true
+		}
+		msg := strings.ToLower(c.Commit.Message)
+		for _, m := range aiMarkers {
+			if strings.Contains(msg, m) {
+				return true
+			}
+		}
+		// Any co-authored-by line crediting a [bot] account.
+		for _, line := range strings.Split(msg, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "co-authored-by:") && strings.Contains(line, "[bot]") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Server) buildSummary(r *http.Request, gh *ghapp.Client, owner, repo string, number int) (*reviewSummary, error) {

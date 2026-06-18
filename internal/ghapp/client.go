@@ -3,7 +3,9 @@ package ghapp
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -65,6 +67,23 @@ type PullFile struct {
 	Deletions        int    `json:"deletions"`
 	Patch            string `json:"patch"`
 	PreviousFilename string `json:"previous_filename"` // set on renames/moves
+}
+
+// Commit is a single commit on a PR. Author/Committer are the GitHub
+// accounts (null when unmatched to a user); Commit.Message is the raw
+// message, used to sniff AI co-authorship trailers.
+type Commit struct {
+	Author    User `json:"author"`
+	Committer User `json:"committer"`
+	Commit    struct {
+		Message string `json:"message"`
+	} `json:"commit"`
+}
+
+// repoContent is GitHub's contents API response for a single file.
+type repoContent struct {
+	Content  string `json:"content"`
+	Encoding string `json:"encoding"`
 }
 
 // Review is a submitted PR review (verdict-level).
@@ -133,6 +152,43 @@ func (c *Client) PullFiles(ctx context.Context, owner, repo string, number, page
 		return nil, false, err
 	}
 	return files, hasNext, nil
+}
+
+// PullCommits fetches all commits on the PR (paged).
+func (c *Client) PullCommits(ctx context.Context, owner, repo string, number int) ([]Commit, error) {
+	var all []Commit
+	for page := 1; ; page++ {
+		var batch []Commit
+		path := fmt.Sprintf("/repos/%s/%s/pulls/%d/commits?per_page=100&page=%d", owner, repo, number, page)
+		hasNext, err := c.getPaged(ctx, path, &batch)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if !hasNext {
+			return all, nil
+		}
+	}
+}
+
+// RepoFileContent fetches a single file's decoded content at ref.
+// A missing file (404) returns ("", false, nil), not an error.
+func (c *Client) RepoFileContent(ctx context.Context, owner, repo, ref, path string) (string, bool, error) {
+	var rc repoContent
+	p := fmt.Sprintf("/repos/%s/%s/contents/%s?ref=%s", owner, repo, path, ref)
+	if err := c.get(ctx, p, &rc); err != nil {
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	// The contents API base64-encodes file bodies (with embedded newlines).
+	decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(rc.Content, "\n", ""))
+	if err != nil {
+		return "", false, err
+	}
+	return string(decoded), true, nil
 }
 
 // Reviews fetches all submitted reviews on the PR.
