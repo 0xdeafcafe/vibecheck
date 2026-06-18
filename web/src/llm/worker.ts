@@ -8,25 +8,35 @@ const DEFAULT_MODEL = 'onnx-community/gemma-3-1b-it-ONNX';
 // One pipeline per model id, so switching models keeps each one cached.
 const generators = new Map<string, Promise<TextGenerationPipeline>>();
 
+function createPipeline(model: string, device: 'webgpu' | 'wasm'): Promise<TextGenerationPipeline> {
+  return pipeline('text-generation', model, {
+    dtype: 'q4',
+    device,
+    progress_callback: (p: { status: string; progress?: number; file?: string }) => {
+      if (p.status === 'progress' && p.progress !== undefined) {
+        postMessage({ type: 'progress', progress: Math.round(p.progress) });
+      }
+    },
+  }) as Promise<TextGenerationPipeline>;
+}
+
 function loadGenerator(model: string): Promise<TextGenerationPipeline> {
   let g = generators.get(model);
   if (!g) {
-    const device = 'gpu' in navigator ? 'webgpu' : 'wasm';
-    g = (
-      pipeline('text-generation', model, {
-        dtype: 'q4',
-        device,
-        progress_callback: (p: { status: string; progress?: number; file?: string }) => {
-          if (p.status === 'progress' && p.progress !== undefined) {
-            postMessage({ type: 'progress', progress: Math.round(p.progress) });
-          }
-        },
-      }) as Promise<TextGenerationPipeline>
-    ).catch((err) => {
-      // a failed load (network blip mid-download) must not poison retries
-      generators.delete(model);
-      throw err;
-    });
+    const wantsGpu = 'gpu' in navigator;
+    g = createPipeline(model, wantsGpu ? 'webgpu' : 'wasm')
+      .catch((err) => {
+        // WebGPU is sometimes reported present but has no usable adapter
+        // (headless / some browsers) — fall back to CPU/WASM rather than
+        // failing silently.
+        if (wantsGpu) return createPipeline(model, 'wasm');
+        throw err;
+      })
+      .catch((err) => {
+        // a failed load (network blip mid-download) must not poison retries
+        generators.delete(model);
+        throw err;
+      });
     generators.set(model, g);
   }
   return g;

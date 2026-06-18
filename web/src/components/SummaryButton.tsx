@@ -16,6 +16,7 @@ export function SummaryButton({ cacheKey, kind, getText, label = '✨ tl;dr' }: 
   const [summary, setSummary] = useState<string | null>(() => cachedSummary(cacheKey));
   const [working, setWorking] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
 
   // re-read the cache when the model (hence the cache key) changes
   useEffect(() => {
@@ -31,10 +32,12 @@ export function SummaryButton({ cacheKey, kind, getText, label = '✨ tl;dr' }: 
     e.preventDefault();
     e.stopPropagation();
     setWorking(true);
+    setFailed(false);
     try {
       setSummary(await summarize(cacheKey, getText(), kind));
     } catch (err) {
       console.error('tl;dr failed', err);
+      setFailed(true);
     } finally {
       setWorking(false);
       setProgress(null);
@@ -75,7 +78,9 @@ export function SummaryButton({ cacheKey, kind, getText, label = '✨ tl;dr' }: 
         ? progress !== null && progress < 100
           ? `model ${progress}%`
           : 'thinking…'
-        : label}
+        : failed
+          ? '↻ tl;dr failed — retry'
+          : label}
     </button>
   );
 }
