@@ -458,6 +458,70 @@ export function PullPage() {
         </p>
       </header>
 
+      {/* Triage bar: burn-down + filters + a jump past the intent panel to
+          the files. Above intent so the controls stay sticky from the top. */}
+      <div className="sticky top-0 z-30 -mx-4 mb-3 flex flex-wrap items-center gap-3 border-b border-line bg-canvas/95 px-4 py-2 backdrop-blur">
+        <span className="flex items-center gap-2">
+          <span className="h-1.5 w-32 overflow-hidden rounded-full bg-line">
+            <span
+              className="block h-full rounded-full bg-accent transition-[width]"
+              style={{ width: files.length ? `${(viewedCount / files.length) * 100}%` : '0%' }}
+            />
+          </span>
+          <span className="font-mono text-xs text-muted">
+            {viewedCount}/{files.length} viewed
+          </span>
+        </span>
+        <button
+          onClick={() =>
+            document.querySelector('main')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+          className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent hover:bg-accent hover:text-accent-ink"
+          title="Jump to the files"
+        >
+          ↓ {files.length} files
+        </button>
+        <span className="ml-auto flex items-center gap-1.5">
+          {(
+            [
+              ...(ownedCount > 0 ? [['mine', 'only my areas']] : []),
+              ['hideTests', 'hide tests'],
+              ['hideDocs', 'hide docs'],
+              ['hideGenerated', 'hide generated'],
+              ['hideViewed', 'hide viewed'],
+            ] as [Filter, string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => toggleFilter(key)}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                filters.has(key)
+                  ? 'bg-accent text-accent-ink'
+                  : 'bg-raised text-muted hover:bg-line hover:text-ink'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          {hiddenCount > 0 && (
+            <span className="ml-1 text-[11px] text-faint">{hiddenCount} hidden</span>
+          )}
+          <span
+            className="ml-2 hidden items-center gap-1 md:flex"
+            title="Keyboard: j/k move · v viewed · o expand · ⌘F search · ⌘K commands · c conversations"
+          >
+            {['j', 'k', 'v', 'o', '⌘F', '⌘K', 'c'].map((k) => (
+              <kbd
+                key={k}
+                className="rounded border border-line bg-raised px-1 text-[10px] font-medium text-muted"
+              >
+                {k}
+              </kbd>
+            ))}
+          </span>
+        </span>
+      </div>
+
       {/* Intent: the lens to read the rest against — but you rarely need to
           re-read it, so it's collapsed by default. Each spec shows a
           heuristic summary, size and new/update without expanding. */}
@@ -538,56 +602,6 @@ export function PullPage() {
           )}
         </div>
       )}
-
-      {/* Triage bar: overall burn-down + what to hide. Sticky so the
-          progress is always in view while working through groups. */}
-      <div className="sticky top-0 z-30 -mx-4 mt-3 mb-4 flex flex-wrap items-center gap-3 border-b border-line bg-canvas/95 px-4 py-2 backdrop-blur">
-        <span className="flex items-center gap-2">
-          <span className="h-1.5 w-32 overflow-hidden rounded-full bg-line">
-            <span
-              className="block h-full rounded-full bg-accent transition-[width]"
-              style={{
-                width: files.length ? `${(viewedCount / files.length) * 100}%` : '0%',
-              }}
-            />
-          </span>
-          <span className="font-mono text-xs text-muted">
-            {viewedCount}/{files.length} viewed
-          </span>
-        </span>
-        <span className="ml-auto flex items-center gap-1.5">
-          {(
-            [
-              ...(ownedCount > 0 ? [['mine', 'only my areas']] : []),
-              ['hideTests', 'hide tests'],
-              ['hideDocs', 'hide docs'],
-              ['hideGenerated', 'hide generated'],
-              ['hideViewed', 'hide viewed'],
-            ] as [Filter, string][]
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => toggleFilter(key)}
-              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                filters.has(key)
-                  ? 'bg-accent text-accent-ink'
-                  : 'bg-raised text-muted hover:bg-line hover:text-ink'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-          {hiddenCount > 0 && (
-            <span className="ml-1 text-[11px] text-faint">{hiddenCount} hidden</span>
-          )}
-          <span
-            className="ml-2 hidden font-mono text-[10px] text-faint md:inline"
-            title="Keyboard review: j/k next/prev file · v mark viewed · o expand/collapse · ⌘F search · ⌘K commands"
-          >
-            j k v o ⌘F ⌘K
-          </span>
-        </span>
-      </div>
 
       <main className="flex flex-col gap-2">
         {visibleGroups.map((g) => (
