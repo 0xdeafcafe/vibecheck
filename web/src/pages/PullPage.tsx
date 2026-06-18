@@ -51,6 +51,10 @@ export function PullPage() {
   // the keydown handler reads the live viewed set without re-binding
   const viewedRef = useRef(viewed);
   viewedRef.current = viewed;
+  // ordered list of (file, group) the keyboard loop walks — includes files
+  // in collapsed slices, which j/k expands on the way.
+  const fileOrderRef = useRef<{ file: string; group: string }[]>([]);
+  const activeIdxRef = useRef(-1);
 
   // Start loading the syntax highlighter early — it's code-split, so kick
   // it off while the PR pages are still fetching.
@@ -62,26 +66,37 @@ export function PullPage() {
   // so we replace it with a model-aware search. j/k/v/o drive a
   // keyboard review flow over the visible files.
   useEffect(() => {
-    function visibleFiles(): HTMLDetailsElement[] {
-      return [...document.querySelectorAll<HTMLDetailsElement>('details[data-file]')];
-    }
     function current(): HTMLDetailsElement | null {
       return document.querySelector<HTMLDetailsElement>('details[data-file].kbd-focus');
     }
-    function focusFile(el: HTMLDetailsElement) {
-      current()?.classList.remove('kbd-focus');
-      el.classList.add('kbd-focus');
-      // the file may live inside a collapsed group — open it to land there
-      const group = el.closest<HTMLDetailsElement>('details[data-group]');
-      if (group) group.open = true;
-      el.scrollIntoView({ block: 'center' });
+    function focusIndex(idx: number) {
+      const order = fileOrderRef.current;
+      if (idx < 0 || idx >= order.length) return;
+      activeIdxRef.current = idx;
+      const { file, group } = order[idx];
+      const cur = current();
+      cur?.classList.remove('kbd-focus');
+      cur?.removeAttribute('aria-current');
+      // the next file may live in a collapsed slice — open it so it mounts,
+      // then focus it on the next frame.
+      const g = document.querySelector<HTMLDetailsElement>(
+        `details[data-group="${CSS.escape(group)}"]`,
+      );
+      if (g) g.open = true;
+      requestAnimationFrame(() => {
+        const el = document.querySelector<HTMLDetailsElement>(
+          `details[data-file="${CSS.escape(file)}"]`,
+        );
+        if (!el) return;
+        el.classList.add('kbd-focus');
+        el.setAttribute('aria-current', 'true');
+        el.scrollIntoView({ block: 'center' });
+      });
     }
     function step(dir: 1 | -1) {
-      const files = visibleFiles();
-      if (files.length === 0) return;
-      const idx = files.findIndex((f) => f.classList.contains('kbd-focus'));
-      const next = files[Math.min(Math.max(idx + dir, 0), files.length - 1)];
-      if (next) focusFile(next);
+      const order = fileOrderRef.current;
+      if (order.length === 0) return;
+      focusIndex(Math.min(Math.max(activeIdxRef.current + dir, 0), order.length - 1));
     }
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
@@ -202,6 +217,9 @@ export function PullPage() {
         }))
         .filter((g) => g.files.length > 0),
     [groups, filters, viewed],
+  );
+  fileOrderRef.current = visibleGroups.flatMap((g) =>
+    g.files.map((f) => ({ file: f.filename, group: g.id })),
   );
 
   const commands = useMemo<Command[]>(() => {

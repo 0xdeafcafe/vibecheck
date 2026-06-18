@@ -133,6 +133,7 @@ details[data-file].kbd-focus {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
   border-radius: 0.5rem;
+  box-shadow: -4px 0 0 0 var(--color-accent);
 }
 
 /* rendered GitHub markdown (PR bodies, comments) */

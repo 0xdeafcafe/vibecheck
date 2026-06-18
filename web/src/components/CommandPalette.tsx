@@ -24,8 +24,13 @@ export function CommandPalette({ open, onClose, commands }: Props) {
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return commands;
-    return commands.filter((c) =>
+    const matched = commands.filter((c) =>
       `${c.group ?? ''} ${c.label} ${c.hint ?? ''}`.toLowerCase().includes(q),
+    );
+    // For an ambiguous query ("tests"), rank navigation above destructive
+    // Filter toggles so Enter doesn't fire "hide tests" instead of jumping.
+    return [...matched].sort(
+      (a, b) => (a.group === 'Filter' ? 1 : 0) - (b.group === 'Filter' ? 1 : 0),
     );
   }, [commands, query]);
 
