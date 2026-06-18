@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { ClassifiedFile, DraftComment, ExistingComment } from '../api';
 import { parsePatch } from '../diff';
 import { highlightLine, languageFor, useSyntax } from '../highlight';
+import { useImportResolver } from '../imports';
 import { renderMarkdown } from '../markdown';
 import { SummaryButton } from './SummaryButton';
 
@@ -44,6 +45,14 @@ export function FileDiff({
     [file.patch],
   );
   const language = languageFor(file.filename);
+  const resolver = useImportResolver();
+  const importTargets = useMemo(
+    () =>
+      rows.map((r) =>
+        r.kind !== 'hunk' && resolver ? resolver.resolve(file.filename, r.text) : null,
+      ),
+    [rows, resolver, file.filename],
+  );
 
   // Anchor existing comments to RIGHT-side line numbers; comments on
   // outdated hunks (line 0/undefined) collect at the bottom of the file.
@@ -191,11 +200,14 @@ export function FileDiff({
                     {row.kind === 'hunk' ? (
                       row.text
                     ) : (
-                      <span
-                        dangerouslySetInnerHTML={{
-                          __html: highlightLine(row.text, language),
-                        }}
-                      />
+                      <>
+                        <span
+                          dangerouslySetInnerHTML={{
+                            __html: highlightLine(row.text, language),
+                          }}
+                        />
+                        {importTargets[i] && <ImportJump target={importTargets[i]!} />}
+                      </>
                     )}
                   </td>
                 </tr>
@@ -255,6 +267,52 @@ export function FileDiff({
         </div>
       )}
     </details>
+  );
+}
+
+// An import that points at another file changed in this PR: click to jump to
+// it (opening its group on the way and flashing it), peek a summary on hover.
+function ImportJump({ target }: { target: ClassifiedFile }) {
+  const [peek, setPeek] = useState(false);
+  function jump(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = document.querySelector<HTMLDetailsElement>(
+      `details[data-file="${CSS.escape(target.filename)}"]`,
+    );
+    if (!el) return;
+    let a = el.parentElement;
+    while (a) {
+      if (a instanceof HTMLDetailsElement) a.open = true;
+      a = a.parentElement;
+    }
+    el.open = true;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('flash');
+    void el.offsetWidth;
+    el.classList.add('flash');
+  }
+  return (
+    <span className="relative ml-1 inline-flex align-middle">
+      <button
+        onClick={jump}
+        onMouseEnter={() => setPeek(true)}
+        onMouseLeave={() => setPeek(false)}
+        className="rounded-sm bg-accent-soft px-1 text-[10px] font-semibold text-accent hover:bg-accent hover:text-accent-ink"
+        title={`Jump to ${target.filename}`}
+      >
+        ↪
+      </button>
+      {peek && (
+        <span className="absolute left-0 top-5 z-30 w-72 rounded-md border border-line bg-surface p-2 font-sans text-[11px] shadow-lg">
+          <span className="block truncate font-mono text-ink">{target.filename}</span>
+          <span className="text-muted">changed here · {target.stratum} · </span>
+          <span className="text-add">+{target.additions}</span>{' '}
+          <span className="text-del">−{target.deletions}</span>
+          {target.ownedByViewer && <span className="text-accent"> · yours</span>}
+        </span>
+      )}
+    </span>
   );
 }
 

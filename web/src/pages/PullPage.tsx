@@ -20,6 +20,7 @@ import { SearchPalette } from '../components/SearchPalette';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { buildGroups } from '../groups';
 import { warmSyntax } from '../highlight';
+import { buildImportResolver, ImportContext } from '../imports';
 import { summarizeIntent } from '../intent';
 import { renderMarkdown } from '../markdown';
 import { setPref } from '../theme';
@@ -166,6 +167,7 @@ export function PullPage() {
     () => buildGroups(files.filter((f) => f.stratum !== 'intent')),
     [files],
   );
+  const importResolver = useMemo(() => buildImportResolver(files), [files]);
 
   const commentsByFile = useMemo(() => {
     const map = new Map<string, ExistingComment[]>();
@@ -341,6 +343,7 @@ export function PullPage() {
   }
 
   return (
+    <ImportContext.Provider value={importResolver}>
     <div className="mx-auto max-w-6xl px-4 py-5">
       <GradientBackground intensity="ambient" />
       <header className="mb-3" data-minimap="overview">
@@ -564,5 +567,6 @@ export function PullPage() {
       <SearchPalette files={files} open={searchOpen} onClose={() => setSearchOpen(false)} />
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
     </div>
+    </ImportContext.Provider>
   );
 }
