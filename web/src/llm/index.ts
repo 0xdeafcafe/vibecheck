@@ -1,6 +1,9 @@
-// Main-thread wrapper around the Gemma summarizer worker: lazy spawn,
-// per-comment job dispatch, localStorage cache (a summary never changes
-// for a given comment id).
+// Main-thread wrapper around the Gemma summarizer worker: lazy spawn, job
+// dispatch, localStorage cache. Summaries are keyed by an arbitrary string so
+// we can cache one per comment, file, slice or intent, and `kind` picks the
+// prompt the worker uses.
+
+export type SummaryKind = 'comment' | 'thread' | 'file' | 'slice' | 'intent';
 
 type Listener = (progress: number) => void;
 
@@ -33,22 +36,26 @@ export function onModelProgress(l: Listener): () => void {
   return () => progressListeners.delete(l);
 }
 
-const cacheKey = (commentId: number) => `vibecheck:tldr:${commentId}`;
+const cacheKey = (key: string) => `vibecheck:tldr:${key}`;
 
-export function cachedSummary(commentId: number): string | null {
-  return localStorage.getItem(cacheKey(commentId));
+export function cachedSummary(key: string): string | null {
+  return localStorage.getItem(cacheKey(key));
 }
 
-export async function summarize(commentId: number, text: string): Promise<string> {
-  const cached = cachedSummary(commentId);
+export async function summarize(
+  key: string,
+  text: string,
+  kind: SummaryKind = 'comment',
+): Promise<string> {
+  const cached = cachedSummary(key);
   if (cached) return cached;
   const id = nextId++;
   const result = await new Promise<string>((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    getWorker().postMessage({ id, text });
+    getWorker().postMessage({ id, text, kind });
   });
   try {
-    localStorage.setItem(cacheKey(commentId), result);
+    localStorage.setItem(cacheKey(key), result);
   } catch {
     // cache full — summary still returned
   }

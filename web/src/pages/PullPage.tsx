@@ -14,6 +14,7 @@ import { FileDiff } from '../components/FileDiff';
 import { GradientBackground } from '../components/GradientBackground';
 import { GroupCard } from '../components/GroupCard';
 import { Minimap } from '../components/Minimap';
+import { SummaryButton } from '../components/SummaryButton';
 import { ReviewForm } from '../components/ReviewForm';
 import { SearchPalette } from '../components/SearchPalette';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -409,26 +410,47 @@ export function PullPage() {
           </span>
         </summary>
         <div className="flex flex-col gap-2 px-4 pb-3">
+          <div className="flex">
+            <SummaryButton
+              cacheKey={`intent:${prNumber}:${intentFiles.length}`}
+              kind="intent"
+              getText={() =>
+                `${pr.body}\n\n${intentFiles
+                  .map((f) => `--- ${f.filename}\n${f.patch ?? ''}`)
+                  .join('\n')}`
+              }
+              label="✨ tl;dr the intent"
+            />
+          </div>
           {pr.body ? (
             <div
-              className="markdown max-h-56 overflow-y-auto font-sans text-sm leading-relaxed text-ink"
+              className="markdown font-sans text-sm leading-relaxed text-ink"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(pr.body) }}
             />
           ) : (
             <p className="text-sm text-muted">No PR description.</p>
           )}
-          {intentFiles.map((f) => (
-            <FileDiff
-              key={f.filename}
-              file={f}
-              defaultCollapsed
-              viewed={viewed.has(f.filename)}
-              onViewed={(v) => setFileViewed(f.filename, v)}
-              onComment={addDraft}
-              comments={commentsByFile.get(f.filename) ?? []}
-              summary={summarizeIntent(f)}
-            />
-          ))}
+          {intentFiles.length > 0 && (
+            <details open className="rounded-lg border border-line/70 bg-surface/40">
+              <summary className="cursor-pointer px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted hover:text-ink">
+                {intentFiles.length} spec{intentFiles.length > 1 ? 's' : ''}
+              </summary>
+              <div className="flex flex-col gap-2 p-2">
+                {intentFiles.map((f) => (
+                  <FileDiff
+                    key={f.filename}
+                    file={f}
+                    defaultCollapsed
+                    viewed={viewed.has(f.filename)}
+                    onViewed={(v) => setFileViewed(f.filename, v)}
+                    onComment={addDraft}
+                    comments={commentsByFile.get(f.filename) ?? []}
+                    summary={summarizeIntent(f)}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       </details>
 

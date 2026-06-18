@@ -3,6 +3,7 @@ import { DraftComment, ExistingComment, Stratum } from '../api';
 import { ReviewGroup } from '../groups';
 import { groupRisk } from '../risk';
 import { FileDiff } from './FileDiff';
+import { SummaryButton } from './SummaryButton';
 
 function basename(p: string): string {
   const i = p.lastIndexOf('/');
@@ -184,6 +185,16 @@ export function GroupCard({
             onClick={(e) => e.preventDefault()}
           >
             <span className="text-faint">{whyGrouped}</span>
+            <div className="flex">
+              <SummaryButton
+                cacheKey={`slice:${group.id}:${group.additions}-${group.deletions}`}
+                kind="slice"
+                getText={() =>
+                  group.files.map((f) => `--- ${f.filename}\n${f.patch ?? ''}`).join('\n')
+                }
+                label="✨ tl;dr this slice"
+              />
+            </div>
             <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto">
               {group.files.map((f) => {
                 const v = viewed.has(f.filename);

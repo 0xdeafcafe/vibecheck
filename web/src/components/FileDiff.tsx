@@ -1,9 +1,9 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { ClassifiedFile, DraftComment, ExistingComment } from '../api';
 import { parsePatch } from '../diff';
 import { highlightLine, languageFor, useSyntax } from '../highlight';
-import { cachedSummary, onModelProgress, summarize } from '../llm';
 import { renderMarkdown } from '../markdown';
+import { SummaryButton } from './SummaryButton';
 
 interface Props {
   file: ClassifiedFile;
@@ -147,6 +147,16 @@ export function FileDiff({
           viewed
         </label>
       </summary>
+      {!collapsed && (
+        <div className="flex items-center gap-2 border-t border-line px-3 py-1.5">
+          <SummaryButton
+            cacheKey={`file:${file.filename}:${(file.patch ?? '').length}`}
+            kind="file"
+            getText={() => `${file.filename}\n${file.patch ?? ''}`}
+            label="✨ tl;dr this file"
+          />
+        </div>
+      )}
       {/* Mount the diff only when open — a closed <details> still renders its
           children into the DOM, which is what made big PRs unusable. */}
       {!collapsed &&
@@ -248,66 +258,36 @@ export function FileDiff({
   );
 }
 
-// AI bots write essays; collapse them to one line by default. Humans
-// get their full comment. The ✨tl;dr button runs a tiny in-browser
-// Gemma to compress the essay into one sentence (cached per comment).
+// AI bots write essays. Lead with an on-device Gemma tl;dr (full-width,
+// never truncated) and tuck the full text behind a disclosure. Humans get
+// their comment as-is.
 function ExistingCommentView({ comment }: { comment: ExistingComment }) {
   const firstLine = comment.body.split('\n').find((l) => l.trim()) ?? '';
   const isLong = comment.body.trim() !== firstLine.trim();
-  const [summary, setSummary] = useState<string | null>(() => cachedSummary(comment.id));
-  const [working, setWorking] = useState(false);
-  const [progress, setProgress] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!working) return;
-    return onModelProgress(setProgress);
-  }, [working]);
-
-  async function tldr(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    setWorking(true);
-    try {
-      setSummary(await summarize(comment.id, comment.body));
-    } catch (err) {
-      console.error('tl;dr failed', err);
-      setSummary(null);
-    } finally {
-      setWorking(false);
-      setProgress(null);
-    }
-  }
 
   if (comment.bot && isLong) {
     return (
-      <details className="my-0.5 rounded-md border border-line bg-surface">
-        <summary className="flex cursor-pointer items-baseline gap-2 px-2 py-1 font-sans text-xs hover:bg-raised">
+      <div className="my-0.5 flex flex-col gap-1.5 rounded-md border border-line bg-surface px-2 py-1.5 text-xs">
+        <div className="flex items-center gap-2">
           <span className="shrink-0 rounded-sm bg-spark-soft px-1 font-medium text-spark">
             {comment.login} · ai
           </span>
-          <span className={`truncate ${summary ? 'text-ink' : 'text-muted'}`}>
-            {summary ? `✨ ${summary}` : firstLine}
-          </span>
-          {!summary && (
-            <button
-              onClick={tldr}
-              disabled={working}
-              className="ml-auto shrink-0 rounded-sm bg-raised px-1.5 text-[10px] text-muted hover:bg-accent-soft hover:text-accent disabled:opacity-60"
-              title="Summarize with on-device Gemma — first use downloads the model"
-            >
-              {working
-                ? progress !== null && progress < 100
-                  ? `model ${progress}%`
-                  : 'thinking…'
-                : '✨ tl;dr'}
-            </button>
-          )}
-        </summary>
-        <div
-          className="markdown max-h-64 overflow-y-auto border-t border-line px-2 py-1.5 font-sans text-xs leading-relaxed text-muted"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(comment.body) }}
-        />
-      </details>
+          <SummaryButton
+            cacheKey={`comment:${comment.id}`}
+            kind="comment"
+            getText={() => comment.body}
+          />
+        </div>
+        <details>
+          <summary className="cursor-pointer list-none text-[11px] text-faint hover:text-muted">
+            full comment ▾
+          </summary>
+          <div
+            className="markdown mt-1 max-h-64 overflow-y-auto border-t border-line pt-1.5 font-sans leading-relaxed text-muted"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(comment.body) }}
+          />
+        </details>
+      </div>
     );
   }
   return (
