@@ -4,6 +4,20 @@ import { ReviewGroup } from '../groups';
 import { groupRisk } from '../risk';
 import { FileDiff } from './FileDiff';
 
+function basename(p: string): string {
+  const i = p.lastIndexOf('/');
+  return i === -1 ? p : p.slice(i + 1);
+}
+
+function jumpToFile(filename: string) {
+  const el = document.querySelector<HTMLDetailsElement>(
+    `details[data-file="${CSS.escape(filename)}"]`,
+  );
+  if (!el) return;
+  el.open = true;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 interface Props {
   group: ReviewGroup;
   viewed: Set<string>;
@@ -58,6 +72,17 @@ export function GroupCard({
     0,
   );
   const isCluster = group.kind === 'cluster';
+  const whyGrouped = isCluster
+    ? `One mechanical edit repeated across ${group.files.length} files`
+    : [
+        `${group.files.length} files in this folder`,
+        (Object.entries(group.strata) as [Stratum, number][])
+          .map(([s, n]) => `${n} ${s}`)
+          .join(', '),
+        risk.reasons.length ? `risk: ${risk.reasons.join(', ')}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
 
   return (
     <details
@@ -71,8 +96,9 @@ export function GroupCard({
       }`}
     >
       {/* sticky just below the triage bar so you always know which group you're in */}
-      <summary className="sticky top-[42px] z-20 flex cursor-pointer items-center gap-3 bg-surface/90 px-4 py-2.5 backdrop-blur hover:bg-raised">
-        {isCluster ? (
+      <summary className="sticky top-[42px] z-20 flex flex-col gap-2 bg-surface/90 px-4 py-2.5 backdrop-blur">
+        <div className="flex w-full cursor-pointer items-center gap-3">
+          {isCluster ? (
           <>
             <span className="size-2 shrink-0 rounded-full bg-st-mech" />
             <code className="truncate font-mono text-sm text-ink">{group.signature}</code>
@@ -149,6 +175,39 @@ export function GroupCard({
         >
           {done ? 'unmark' : 'mark all viewed'}
         </button>
+        </div>
+        {/* Slice header, pinned while you scroll the group: why these files
+            are together + a done/upcoming manifest you can jump from. */}
+        {open && (
+          <div
+            className="flex flex-col gap-1.5 border-t border-line pt-2 text-[11px]"
+            onClick={(e) => e.preventDefault()}
+          >
+            <span className="text-faint">{whyGrouped}</span>
+            <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+              {group.files.map((f) => {
+                const v = viewed.has(f.filename);
+                return (
+                  <button
+                    key={f.filename}
+                    title={f.filename}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      jumpToFile(f.filename);
+                    }}
+                    className={`flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono ${
+                      v ? 'text-faint' : 'text-muted hover:bg-raised hover:text-ink'
+                    }`}
+                  >
+                    <span className={v ? 'text-add' : 'text-faint'}>{v ? '✓' : '○'}</span>
+                    {basename(f.filename)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </summary>
       {/* Only mount the files when the group is open — collapsed groups cost
           nothing, which is what makes a 200-file PR usable. */}

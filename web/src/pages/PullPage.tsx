@@ -302,6 +302,7 @@ export function PullPage() {
   if (error) {
     return (
       <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 text-center">
+        <GradientBackground intensity="ambient" />
         <h2 className="font-display text-2xl text-ink">
           Couldn’t load {owner}/{repo}#{prNumber}
         </h2>
@@ -332,6 +333,7 @@ export function PullPage() {
   if (!pr) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-muted">
+        <GradientBackground intensity="full" />
         Loading pull request…
       </div>
     );
