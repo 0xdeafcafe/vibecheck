@@ -257,8 +257,8 @@ details.flash > summary {
 }
 /* ambient: slow + faint (the working app) */
 .gradient-bg--ambient .gradient-blob {
-  opacity: 0.16;
-  filter: blur(110px);
+  opacity: 0.55;
+  filter: blur(70px);
   animation-duration: 120s;
 }
 
@@ -266,7 +266,7 @@ details.flash > summary {
   opacity: 0.24;
 }
 :root[data-theme='dark'] .gradient-bg--ambient .gradient-blob {
-  opacity: 0.1;
+  opacity: 0.24;
 }
 
 @keyframes drift-a {
