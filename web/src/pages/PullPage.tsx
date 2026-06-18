@@ -10,6 +10,7 @@ import {
   ReviewSummary,
 } from '../api';
 import { CommandPalette, type Command } from '../components/CommandPalette';
+import { Conversations } from '../components/Conversations';
 import { FileDiff } from '../components/FileDiff';
 import { GradientBackground } from '../components/GradientBackground';
 import { GroupCard } from '../components/GroupCard';
@@ -42,6 +43,7 @@ export function PullPage() {
   const [drafts, setDrafts] = useState<DraftComment[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [convOpen, setConvOpen] = useState(false);
   const [aiAuthored, setAiAuthored] = useState(false);
   const [filters, setFilters] = useState<Set<Filter>>(new Set());
 
@@ -121,6 +123,10 @@ export function PullPage() {
           }
           break;
         }
+        case 'c':
+          e.preventDefault();
+          setConvOpen(true);
+          break;
       }
     }
     window.addEventListener('keydown', onKey);
@@ -264,6 +270,13 @@ export function PullPage() {
         hint: '⌘F',
         run: () => setSearchOpen(true),
       },
+      {
+        id: 'conversations',
+        group: 'Go',
+        label: 'View all conversations',
+        hint: 'c',
+        run: () => setConvOpen(true),
+      },
       { id: 'j-intent', group: 'Jump', label: 'Jump to intent', run: () => jump('intent') },
       { id: 'j-core', group: 'Jump', label: 'Jump to core logic', run: () => jump('core') },
       { id: 'j-tests', group: 'Jump', label: 'Jump to tests', run: () => jump('tests') },
@@ -301,6 +314,27 @@ export function PullPage() {
   }
   function removeDraft(index: number) {
     setDrafts((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function jumpToComment(path: string, line?: number) {
+    setConvOpen(false);
+    requestAnimationFrame(() => {
+      const file = document.querySelector<HTMLDetailsElement>(
+        `details[data-file="${CSS.escape(path)}"]`,
+      );
+      if (!file) return;
+      let a = file.parentElement;
+      while (a) {
+        if (a instanceof HTMLDetailsElement) a.open = true;
+        a = a.parentElement;
+      }
+      file.open = true;
+      const target = (line && file.querySelector<HTMLElement>(`tr[data-line="${line}"]`)) || file;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.remove('flash');
+      void target.offsetWidth;
+      target.classList.add('flash');
+    });
   }
 
   if (error) {
@@ -383,12 +417,16 @@ export function PullPage() {
             {loadingMore && '…'}
           </span>
           {summary && (
-            <span>
+            <button
+              onClick={() => setConvOpen(true)}
+              className="rounded-full bg-raised px-2 py-px font-medium text-muted hover:bg-accent-soft hover:text-accent"
+              title="View all conversations (c)"
+            >
               💬 {summary.reviewComments.human + summary.issueComments.human} human ·{' '}
               <span className="text-spark">
                 {summary.reviewComments.ai + summary.issueComments.ai} ai
               </span>
-            </span>
+            </button>
           )}
           {summary?.verdicts.map((v) => (
             <span
@@ -568,6 +606,12 @@ export function PullPage() {
       <Minimap depsKey={`${files.length}:${loadingMore}:${visibleGroups.length}`} />
       <SearchPalette files={files} open={searchOpen} onClose={() => setSearchOpen(false)} />
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
+      <Conversations
+        comments={summary?.comments ?? []}
+        open={convOpen}
+        onClose={() => setConvOpen(false)}
+        onJump={jumpToComment}
+      />
     </div>
     </ImportContext.Provider>
   );

@@ -42,9 +42,25 @@ export function SummaryButton({ cacheKey, kind, getText, label = '✨ tl;dr' }: 
   }
 
   if (summary) {
+    // Multi-clause summaries read far better as bullets than one 12px blob.
+    const points = summary
+      .split(/(?:\.\s+|;\s+|\n+)/)
+      .map((s) => s.trim().replace(/[.;]+$/, ''))
+      .filter((s) => s.length > 2);
     return (
-      <div className="rounded-md border border-accent/20 bg-accent-soft px-2.5 py-1.5 text-xs leading-relaxed text-ink">
-        <span className="font-semibold text-accent">✨ tl;dr</span> {summary}
+      <div className="rounded-lg border border-line border-l-2 border-l-accent bg-surface p-3 shadow-sm">
+        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
+          ✨ AI summary
+        </div>
+        {points.length > 1 ? (
+          <ul className="ml-4 list-disc space-y-1 text-sm leading-relaxed text-ink marker:text-accent/50">
+            {points.map((pt, i) => (
+              <li key={i}>{pt}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm leading-relaxed text-ink">{summary}</p>
+        )}
       </div>
     );
   }
