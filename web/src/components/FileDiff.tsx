@@ -147,11 +147,14 @@ export function FileDiff({
           viewed
         </label>
       </summary>
-      {rows.length === 0 ? (
-        <p className="border-t border-line px-3 py-2 text-xs text-muted">
-          No textual diff available (binary or too large).
-        </p>
-      ) : (
+      {/* Mount the diff only when open — a closed <details> still renders its
+          children into the DOM, which is what made big PRs unusable. */}
+      {!collapsed &&
+        (rows.length === 0 ? (
+          <p className="border-t border-line px-3 py-2 text-xs text-muted">
+            No textual diff available (binary or too large).
+          </p>
+        ) : (
         <table className="w-full border-collapse border-t border-line font-mono text-xs leading-5">
           <tbody>
             {rows.map((row, i) => (
@@ -230,8 +233,8 @@ export function FileDiff({
             ))}
           </tbody>
         </table>
-      )}
-      {byLine.orphans.length > 0 && (
+        ))}
+      {!collapsed && byLine.orphans.length > 0 && (
         <div className="border-t border-line px-3 py-1.5">
           <p className="mb-1 text-[10px] uppercase tracking-wider text-faint">
             Comments on outdated lines

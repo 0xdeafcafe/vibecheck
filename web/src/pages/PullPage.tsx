@@ -277,6 +277,8 @@ export function PullPage() {
   const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
   const ownedCount = files.filter((f) => f.ownedByViewer).length;
   const unownedCount = files.filter((f) => f.unowned).length;
+  const largePR =
+    files.length > 40 || files.reduce((n, f) => n + f.additions + f.deletions, 0) > 4000;
   const hiddenCount =
     files.length - visibleGroups.reduce((n, g) => n + g.files.length, 0);
 
@@ -393,7 +395,7 @@ export function PullPage() {
       {/* Intent: the lens to read the rest against — but you rarely need to
           re-read it, so it's collapsed by default. Each spec shows a
           heuristic summary, size and new/update without expanding. */}
-      <details data-minimap="intent" className="rounded-xl border border-accent/20 bg-accent-soft">
+      <details data-minimap="intent" open className="rounded-xl border border-accent/20 bg-accent-soft">
         <summary className="flex cursor-pointer items-center gap-2 px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-accent hover:bg-accent/10">
           Intent
           <span className="font-sans normal-case text-muted">
@@ -510,6 +512,8 @@ export function PullPage() {
             onGroupViewed={setManyViewed}
             onComment={addDraft}
             commentsByFile={commentsByFile}
+            largePR={largePR}
+            aiAuthored={aiAuthored}
           />
         ))}
         {visibleGroups.length === 0 && !loadingMore && (

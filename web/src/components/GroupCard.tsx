@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DraftComment, ExistingComment, Stratum } from '../api';
 import { ReviewGroup } from '../groups';
+import { groupRisk } from '../risk';
 import { FileDiff } from './FileDiff';
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
   onGroupViewed: (filenames: string[], value: boolean) => void;
   onComment: (c: DraftComment) => void;
   commentsByFile: Map<string, ExistingComment[]>;
+  largePR: boolean;
+  aiAuthored: boolean;
 }
 
 const STRATUM_DOT: Record<Stratum, string> = {
@@ -38,12 +41,16 @@ export function GroupCard({
   onGroupViewed,
   onComment,
   commentsByFile,
+  largePR,
+  aiAuthored,
 }: Props) {
-  // Collapse by default for clusters and any heavy group (lots of files or
-  // churn) — a big PR should render super-flat and you expand what you want
-  // as you go, instead of paying to render thousands of rows up front.
+  // Collapse by default for clusters, heavy groups, and everything on a large
+  // PR — the page becomes a summarised accordion you drill into, and a
+  // collapsed group doesn't mount its diffs at all.
   const heavy = group.files.length > 5 || group.additions + group.deletions > 2000;
-  const [open, setOpen] = useState(group.kind !== 'cluster' && !heavy);
+  const collapsedByDefault = group.kind === 'cluster' || heavy || largePR;
+  const [open, setOpen] = useState(!collapsedByDefault);
+  const risk = groupRisk(group, aiAuthored);
   const viewedCount = group.files.filter((f) => viewed.has(f.filename)).length;
   const done = viewedCount === group.files.length;
   const commentCount = group.files.reduce(
@@ -79,6 +86,16 @@ export function GroupCard({
             <code className={`truncate font-mono text-sm ${done ? 'text-faint' : 'text-ink'}`}>
               {group.label}
             </code>
+            {risk.level !== 'low' && (
+              <span
+                className={`shrink-0 rounded-sm px-1 text-[10px] font-semibold uppercase tracking-wide ${
+                  risk.level === 'high' ? 'bg-del-soft text-del' : 'bg-spark-soft text-spark'
+                }`}
+                title={`Risk: ${risk.reasons.join(', ')}`}
+              >
+                {risk.level === 'high' ? 'high risk' : 'med risk'}
+              </span>
+            )}
             <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted">
               {(Object.entries(group.strata) as [Stratum, number][]).map(([s, n]) => (
                 <span key={s} className="flex items-center gap-0.5">
@@ -133,21 +150,28 @@ export function GroupCard({
           {done ? 'unmark' : 'mark all viewed'}
         </button>
       </summary>
-      <div className="flex flex-col gap-2 border-t border-line p-3">
-        {group.files.map((f) => (
-          <FileDiff
-            key={f.filename}
-            file={f}
-            defaultCollapsed={
-              f.stratum === 'generated' || f.status === 'removed' || !!f.mechanical
-            }
-            viewed={viewed.has(f.filename)}
-            onViewed={(v) => onFileViewed(f.filename, v)}
-            onComment={onComment}
-            comments={commentsByFile.get(f.filename) ?? []}
-          />
-        ))}
-      </div>
+      {/* Only mount the files when the group is open — collapsed groups cost
+          nothing, which is what makes a 200-file PR usable. */}
+      {open && (
+        <div className="flex flex-col gap-2 border-t border-line p-3">
+          {group.files.map((f) => (
+            <FileDiff
+              key={f.filename}
+              file={f}
+              defaultCollapsed={
+                f.stratum === 'generated' ||
+                f.status === 'removed' ||
+                !!f.mechanical ||
+                (largePR && (f.stratum === 'tests' || f.stratum === 'docs'))
+              }
+              viewed={viewed.has(f.filename)}
+              onViewed={(v) => onFileViewed(f.filename, v)}
+              onComment={onComment}
+              comments={commentsByFile.get(f.filename) ?? []}
+            />
+          ))}
+        </div>
+      )}
     </details>
   );
 }
